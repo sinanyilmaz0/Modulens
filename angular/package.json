@@ -1,0 +1,59 @@
+{
+  "name": "@modulens/angular",
+  "version": "0.1.0",
+  "description": "Architecture, structure, and quality analysis CLI for Angular workspaces. Scans projects, detects risks, and generates HTML reports.",
+  "bin": {
+    "modulens": "dist/cli/index.js"
+  },
+  "main": "dist/cli/index.js",
+  "types": "dist/cli/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "ts-node src/cli/index.ts",
+    "test": "ts-node src/angular/intelligence/decomposition/decomposition-naming.spec.ts && ts-node src/core/metrics-validation.spec.ts && ts-node src/core/structure-analyzer.spec.ts && ts-node src/angular/family/family-detector.spec.ts && ts-node src/core/analysis-snapshot.spec.ts && ts-node src/report/html/overview-metrics.spec.ts && ts-node src/report/html/components-summary-line.spec.ts && ts-node src/report/severity/severity-resolver.spec.ts && ts-node src/angular/workspace/workspace-reader.spec.ts && ts-node src/report/html/escape-html.spec.ts && ts-node src/core/run-scan-validation.spec.ts",
+    "prepublishOnly": "npm run build",
+    "test:package": "npm pack --dry-run"
+  },
+  "keywords": [
+    "modulens",
+    "angular",
+    "cli",
+    "architecture",
+    "analysis",
+    "report",
+    "quality",
+    "workspace",
+    "static-analysis",
+    "code-quality"
+  ],
+  "author": "Sinan Yılmaz",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "dependencies": {
+    "commander": "^14.0.3",
+    "glob": "^13.0.6",
+    "typescript": "^5.9.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "ts-node": "^10.9.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sinanyilmaz0/modulens.git"
+  },
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/sinanyilmaz0/modulens/issues"
+  },
+  "homepage": "https://github.com/sinanyilmaz0/modulens#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}

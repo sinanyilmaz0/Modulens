@@ -1,0 +1,20 @@
+{
+  "name": "modulens",
+  "private": true,
+  "workspaces": ["angular"],
+  "scripts": {
+    "build": "npm run build -w angular",
+    "test": "npm run test -w angular",
+    "dev": "npm run dev -w angular",
+    "clean": "rimraf angular/dist dist"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "typescript": "^5.9.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^25.3.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
