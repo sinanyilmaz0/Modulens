@@ -30,20 +30,6 @@ For full documentation, installation options, and usage examples, see the [Angul
 
 ---
 
-## Development
-
-From the repository root:
-
-```bash
-npm install
-npm run build      # Build angular package
-npm run test       # Run tests
-npm run dev        # Run CLI in dev mode (from angular workspace)
-npm run clean      # Remove build output
-```
-
----
-
 ## License
 
 ISC
