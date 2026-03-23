@@ -7,6 +7,13 @@ import { spawn } from "child_process";
 import { runScan } from "../core/run-scan";
 import { getFormatter } from "../formatters";
 import { ModulensError } from "../core/modulens-error";
+import { readCliPackageVersion } from "./package-version";
+import {
+  parseScanFormat,
+  resolveScanOutput,
+  shouldOpenBrowser,
+  type ScanCliFormat,
+} from "./scan-output";
 
 function resolveWorkspacePath(input: string): string {
   return path.resolve(process.cwd(), input);
@@ -14,7 +21,6 @@ function resolveWorkspacePath(input: string): string {
 
 function ensureWorkspaceDirectory(p: string): void {
   if (!fs.existsSync(p)) {
-    process.exitCode = 1;
     throw new ModulensError(
       `Workspace path does not exist: ${p}. Run 'modulens scan' to scan current directory.`,
       "WORKSPACE_NOT_FOUND"
@@ -22,21 +28,11 @@ function ensureWorkspaceDirectory(p: string): void {
   }
   const stat = fs.statSync(p);
   if (!stat.isDirectory()) {
-    process.exitCode = 1;
     throw new ModulensError(
       `Workspace path is not a directory: ${p}. Pass a folder path.`,
       "WORKSPACE_NOT_DIRECTORY"
     );
   }
-}
-
-function slugifyWorkspaceName(name: string): string {
-  const slug = name
-    .trim()
-    .replace(/[^a-zA-Z0-9_-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^[-]+|[-]+$/g, "");
-  return slug || "workspace";
 }
 
 function openInDefaultBrowser(targetPath: string): Promise<void> {
@@ -73,12 +69,53 @@ function openInDefaultBrowser(targetPath: string): Promise<void> {
   });
 }
 
-async function handleScan(workspacePathArg: string): Promise<void> {
+interface ScanCommandOptions {
+  format: string;
+  output?: string;
+  /**
+   * Commander maps `--no-open` to `open: false` (default `open: true`), not `noOpen`.
+   */
+  open?: boolean;
+}
+
+async function handleScan(
+  workspacePathArg: string,
+  scanOptions: ScanCommandOptions
+): Promise<void> {
+  const formatParsed = parseScanFormat(scanOptions.format ?? "html");
+  if (formatParsed === null) {
+    console.error(
+      `[Modulens] Invalid --format "${scanOptions.format}". Use "html" or "json".`
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const format: ScanCliFormat = formatParsed;
+
+  const resolvedPath = resolveWorkspacePath(workspacePathArg);
+  const noOpen = scanOptions.open === false;
+  const outputResolved = resolveScanOutput({
+    format,
+    outputOption: scanOptions.output,
+    workspaceRootAbsolute: resolvedPath,
+    cwd: process.cwd(),
+  });
+
+  if (!outputResolved.ok) {
+    console.error(`[Modulens] ${outputResolved.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  const outputTarget = outputResolved.target;
+  const jsonToStdout = format === "json" && outputTarget.kind === "stdout";
+
+  const logInfo = jsonToStdout ? console.error.bind(console) : console.log.bind(console);
+  const logWarn = console.warn.bind(console);
+
   try {
-    const resolvedPath = resolveWorkspacePath(workspacePathArg);
     ensureWorkspaceDirectory(resolvedPath);
 
-    console.log(`[Modulens] Scanning workspace: ${resolvedPath}`);
+    logInfo(`[Modulens] Scanning workspace: ${resolvedPath}`);
 
     const snapshot = await runScan(resolvedPath);
     if (snapshot === null) {
@@ -89,27 +126,32 @@ async function handleScan(workspacePathArg: string): Promise<void> {
       return;
     }
 
-    const htmlFormatter = getFormatter("html");
-    const html = htmlFormatter.format(snapshot);
+    const formatter = getFormatter(format);
+    const payload = formatter.format(snapshot);
 
-    const workspaceName = path.basename(resolvedPath);
-    const slug = slugifyWorkspaceName(workspaceName);
-    const htmlFileName = `modulens-angular-report-${slug}.html`;
-    const htmlOutputPath = path.join(resolvedPath, htmlFileName);
+    if (outputTarget.kind === "stdout") {
+      process.stdout.write(payload);
+      if (!payload.endsWith("\n")) {
+        process.stdout.write("\n");
+      }
+      logInfo("[Modulens] JSON report written to stdout.");
+      return;
+    }
 
-    fs.writeFileSync(htmlOutputPath, html, "utf-8");
-    console.log(`[Modulens] Report generated at: ${htmlOutputPath}`);
-    console.log("[Modulens] Opening report in your default browser...");
+    const outPath = outputTarget.absolutePath;
+    fs.writeFileSync(outPath, payload, "utf-8");
+    logInfo(`[Modulens] Report generated at: ${outPath}`);
 
-    try {
-      await openInDefaultBrowser(htmlOutputPath);
-    } catch (openError) {
-      console.warn(
-        "[Modulens] Report generated, but could not open browser automatically."
-      );
-      console.warn(
-        `[Modulens] Please open the file manually: ${htmlOutputPath}`
-      );
+    if (shouldOpenBrowser(format, noOpen)) {
+      logInfo("[Modulens] Opening report in your default browser...");
+      try {
+        await openInDefaultBrowser(outPath);
+      } catch {
+        logWarn(
+          "[Modulens] Report generated, but could not open browser automatically."
+        );
+        logWarn(`[Modulens] Please open the file manually: ${outPath}`);
+      }
     }
   } catch (error) {
     if (error instanceof ModulensError) {
@@ -120,7 +162,9 @@ async function handleScan(workspacePathArg: string): Promise<void> {
       process.exitCode = 1;
       return;
     }
-    console.error("[Modulens] An error occurred while scanning. Run with DEBUG=1 for details.");
+    console.error(
+      "[Modulens] An error occurred while scanning. Run with DEBUG=1 for details."
+    );
     if (process.env.DEBUG) {
       console.error(error);
     }
@@ -130,8 +174,7 @@ async function handleScan(workspacePathArg: string): Promise<void> {
 
 const CLI_NAME = "modulens";
 const CLI_TAGLINE =
-  "Scan Angular workspaces and generate an HTML health report.";
-const CLI_VERSION = "0.1.0";
+  "Scan Angular workspaces and generate architecture health reports (HTML or JSON).";
 
 async function main(): Promise<void> {
   const program = new Command();
@@ -139,7 +182,11 @@ async function main(): Promise<void> {
   program
     .name(CLI_NAME)
     .description(CLI_TAGLINE)
-    .version(CLI_VERSION, "-v, --version", "Show Modulens version");
+    .version(
+      readCliPackageVersion(),
+      "-v, --version",
+      "Show Modulens version"
+    );
 
   const scanCommand = program
     .command("scan")
@@ -147,24 +194,43 @@ async function main(): Promise<void> {
       "[workspacePath]",
       "Optional path to the Angular workspace (defaults to current directory)."
     )
-    .description(
-      "Scan an Angular workspace (current directory by default) and open an HTML health report in your browser."
+    .option(
+      "--format <type>",
+      'Report format: "html" or "json"',
+      "html"
     )
-    .action(async (workspacePathArg?: string) => {
+    .option(
+      "-o, --output <path>",
+      "Write report to this path. Use - with --format json to print JSON to stdout."
+    )
+    .option(
+      "--no-open",
+      "Do not open the HTML report in a browser (ignored for JSON output)"
+    )
+    .description(
+      "Scan an Angular workspace (current directory by default). By default writes an HTML report in the workspace and opens it in your browser."
+    )
+    .action(async (workspacePathArg: string | undefined, options: ScanCommandOptions) => {
       const effectivePath =
         workspacePathArg && workspacePathArg.trim().length > 0
           ? workspacePathArg
           : ".";
-      await handleScan(effectivePath);
+      await handleScan(effectivePath, {
+        format: options.format,
+        output: options.output,
+        open: options.open,
+      });
     });
 
   scanCommand.addHelpText(
     "after",
     `
 Examples:
-  modulens scan             # scan current directory
-  modulens scan .           # scan current directory (explicit)
-  modulens scan ./my-workspace
+  modulens scan                          # HTML report in workspace + open browser
+  modulens scan . --no-open              # HTML report only
+  modulens scan ./my-workspace --format json
+  modulens scan . --format json --output -
+  modulens scan . --format html -o ./out/report.html --no-open
 `
   );
 
