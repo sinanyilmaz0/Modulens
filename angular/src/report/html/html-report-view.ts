@@ -103,6 +103,14 @@ import {
 } from "../../refactor/sequencing-copy";
 import { MAX_WARNINGS_PER_RISK } from "../../formatters/format-helpers";
 import { getTranslations } from "./i18n/translations";
+import {
+  buildExecutiveSummaryModel,
+  buildPriorityHotspotRows,
+  buildRecommendedActionItems,
+  renderExecutiveSummarySection,
+  renderPriorityFocusSection,
+  renderRecommendedActionsSection,
+} from "./report-overview-insights";
 
 function getRiskBadgeClass(riskLevel: string): string {
   const lower = riskLevel.toLowerCase();
@@ -1996,8 +2004,9 @@ function renderOverviewPage(
 
   let html = "";
 
+  const diagnosis = buildWorkspaceDiagnosis(result, formatIssue);
+
   if (scores) {
-    const diagnosis = buildWorkspaceDiagnosis(result, formatIssue);
     html += renderOverviewHero(
       scores,
       result.workspaceSummary,
@@ -2016,10 +2025,18 @@ function renderOverviewPage(
     );
   }
 
-  html += renderDominantIssueDistribution(result.diagnosticSummary.dominantIssueCounts, formatIssue, t);
+  html += renderExecutiveSummarySection(buildExecutiveSummaryModel(result, diagnosis, formatIssue, t), t);
+  html += renderPriorityFocusSection(buildPriorityHotspotRows(result, formatIssue), t);
+
+  html += renderDominantIssueDistribution(
+    result.diagnosticSummary.dominantIssueCounts,
+    formatIssue,
+    t,
+    "overview-dominant-issues"
+  );
 
   const fixFirstHelper = (t.overview as { fixFirstHelper?: string }).fixFirstHelper;
-  html += `<div class="overview-section"><h2 class="page-section-title section-title-caps" data-i18n="overview.fixFirst">${escapeHtml(t.overview.fixFirst)}</h2>`;
+  html += `<div class="overview-section" id="overview-fix-first"><h2 class="page-section-title section-title-caps" data-i18n="overview.fixFirst">${escapeHtml(t.overview.fixFirst)}</h2>`;
   if (fixFirstHelper) {
     html += `<p class="section-helper text-muted">${escapeHtml(fixFirstHelper)}</p>`;
   }
@@ -2030,7 +2047,7 @@ function renderOverviewPage(
   }
   html += `</div>`;
 
-  html += renderTopProblematicCompactList(topProblematicItems, formatIssue, t);
+  html += renderTopProblematicCompactList(topProblematicItems, formatIssue, t, "overview-top-problematic");
 
   html += renderOverviewPatternPreview(
     archPatterns,
@@ -2048,8 +2065,11 @@ function renderOverviewPage(
     }>,
     formatIssue,
     formatFamily,
-    t
+    t,
+    "overview-pattern-preview"
   );
+
+  html += renderRecommendedActionsSection(buildRecommendedActionItems(result, sections), t);
 
   const dc = result.diagnosticSummary.dominantIssueCounts;
   const topIssue = ["TEMPLATE_HEAVY_COMPONENT", "GOD_COMPONENT", "ORCHESTRATION_HEAVY_COMPONENT"]
@@ -2064,6 +2084,7 @@ function renderOverviewPage(
   html += renderOverviewActionNav(t, {
     primaryCtaLabel: primaryCtaLabel ?? undefined,
     hasPatterns: archPatterns.length > 0 || featurePatterns.length > 0,
+    sectionHtmlId: "overview-next-steps",
   });
 
   return html;
