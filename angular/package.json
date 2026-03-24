@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "ts-node src/cli/index.ts",
-    "test": "ts-node src/angular/intelligence/decomposition/decomposition-naming.spec.ts && ts-node src/core/metrics-validation.spec.ts && ts-node src/core/structure-analyzer.spec.ts && ts-node src/angular/family/family-detector.spec.ts && ts-node src/core/analysis-snapshot.spec.ts && ts-node src/report/html/overview-metrics.spec.ts && ts-node src/report/html/components-summary-line.spec.ts && ts-node src/report/severity/severity-resolver.spec.ts && ts-node src/angular/workspace/workspace-reader.spec.ts && ts-node src/report/html/escape-html.spec.ts && ts-node src/core/run-scan-validation.spec.ts && ts-node src/cli/scan-output.spec.ts && ts-node src/cli/package-version.spec.ts && ts-node src/cli/commander-open-flag.spec.ts",
+    "test": "ts-node src/angular/intelligence/decomposition/decomposition-naming.spec.ts && ts-node src/core/metrics-validation.spec.ts && ts-node src/core/structure-analyzer.spec.ts && ts-node src/angular/family/family-detector.spec.ts && ts-node src/core/analysis-snapshot.spec.ts && ts-node src/report/html/overview-metrics.spec.ts && ts-node src/report/html/report-overview-insights.spec.ts && ts-node src/report/html/components-summary-line.spec.ts && ts-node src/report/severity/severity-resolver.spec.ts && ts-node src/angular/workspace/workspace-reader.spec.ts && ts-node src/report/html/escape-html.spec.ts && ts-node src/core/run-scan-validation.spec.ts && ts-node src/cli/scan-output.spec.ts && ts-node src/cli/package-version.spec.ts && ts-node src/cli/commander-open-flag.spec.ts",
     "prepublishOnly": "npm run build",
     "test:package": "npm pack --dry-run"
   },

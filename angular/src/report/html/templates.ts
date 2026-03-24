@@ -706,7 +706,8 @@ export function renderProjectHotspotsOverview(
 export function renderDominantIssueDistribution(
   dominantIssueCounts: Record<string, number>,
   formatIssue: (issue: string | null) => string,
-  t: Translations
+  t: Translations,
+  sectionHtmlId?: string
 ): string {
   const entries = [
     "TEMPLATE_HEAVY_COMPONENT",
@@ -750,8 +751,9 @@ export function renderDominantIssueDistribution(
   const titleWithTooltip = dominantExpl
     ? `${escapeHtml(t.overview.whatHurtsMost)} ${renderInfoTooltip(dominantExpl)}`
     : escapeHtml(t.overview.whatHurtsMost);
+  const sectionIdAttr = sectionHtmlId ? ` id="${escapeHtml(sectionHtmlId)}"` : "";
   return `
-    <div class="what-hurts-section">
+    <div class="what-hurts-section"${sectionIdAttr}>
       <h2 class="page-section-title section-title-caps">${titleWithTooltip}</h2>
       ${whatHurtsHelper ? `<p class="section-helper text-muted">${escapeHtml(whatHurtsHelper)}</p>` : ""}
       <div class="what-hurts-bars">${html}</div>
@@ -895,14 +897,16 @@ export function renderTopProblematicCompactList(
     project?: string | null;
   }>,
   formatIssue: (issue: string | null) => string,
-  t: Translations
+  t: Translations,
+  sectionHtmlId?: string
 ): string {
   const topProbIntro = (t.overview as unknown as Record<string, string | undefined>).topProblematicIntro;
   const openComponentsLabel = (t.overview as unknown as Record<string, string | undefined>).actionOpenComponents ?? "Open Components";
   const detailsLinkLabel = (t.overview as unknown as Record<string, string | undefined>).actionViewDetailsShort ?? "Details";
+  const sectionIdAttr = sectionHtmlId ? ` id="${escapeHtml(sectionHtmlId)}"` : "";
   if (items.length === 0) {
     return `
-    <div class="overview-section">
+    <div class="overview-section"${sectionIdAttr}>
       <h2 class="page-section-title section-title-caps">${escapeHtml(t.overview.topProblematic)}</h2>
       ${renderEmptyState(t.empty.noComponents)}
       <a href="#components" class="overview-action-link planner-nav-link" data-nav="components">${escapeHtml(openComponentsLabel)}</a>
@@ -930,7 +934,7 @@ export function renderTopProblematicCompactList(
     .join("");
 
   return `
-    <div class="overview-section">
+    <div class="overview-section"${sectionIdAttr}>
       ${renderSectionHeader(t.overview.topProblematic, { helper: topProbIntro })}
       <div class="top-problematic-table-wrap">
         <table class="top-problematic-table top-problematic-overview-table">
@@ -957,7 +961,7 @@ export function renderTopProblematicCompactList(
 
 export function renderOverviewActionNav(
   t: Translations,
-  options?: { primaryCtaLabel?: string; hasPatterns?: boolean }
+  options?: { primaryCtaLabel?: string; hasPatterns?: boolean; sectionHtmlId?: string }
 ): string {
   const ov = t.overview as unknown as Record<string, string | undefined>;
   const title = ov.actionNavTitle ?? "Where should I go next?";
@@ -976,8 +980,9 @@ export function renderOverviewActionNav(
     `<a href="#planner" class="overview-action-card planner-nav-link" data-nav="planner">${escapeHtml(openRefactorPlan)}</a>`,
   ].filter(Boolean);
 
+  const wrapId = options?.sectionHtmlId ? ` id="${escapeHtml(options.sectionHtmlId)}"` : "";
   return `
-    <div class="overview-section overview-action-nav">
+    <div class="overview-section overview-action-nav"${wrapId}>
       <h2 class="page-section-title section-title-caps">${escapeHtml(title)}</h2>
       <div class="overview-action-nav-grid">
         ${primaryCta}
@@ -1015,10 +1020,12 @@ export function renderOverviewPatternPreview(
   }>,
   _formatIssue: (issue: string | null) => string,
   formatFamily: (name: string) => string,
-  t: Translations
+  t: Translations,
+  sectionHtmlId?: string
 ): string {
   const ov = t.overview as unknown as Record<string, string | undefined>;
   const openPatternsLabel = ov.actionOpenPatterns ?? "Open Patterns";
+  const sectionIdAttr = sectionHtmlId ? ` id="${escapeHtml(sectionHtmlId)}"` : "";
 
   const previewItems: string[] = [];
   const maxPreview = 2;
@@ -1054,7 +1061,7 @@ export function renderOverviewPatternPreview(
   if (previewItems.length === 0) {
     const noPatternsMsg = ov.noRepeatedPatternsGood ?? t.empty.noPatterns;
     return `
-    <div class="overview-section overview-pattern-preview overview-pattern-preview-empty">
+    <div class="overview-section overview-pattern-preview overview-pattern-preview-empty"${sectionIdAttr}>
       <h2 class="page-section-title section-title-caps">${escapeHtml(t.overview.repeatedPatterns)}</h2>
       <div class="overview-pattern-empty-state">${escapeHtml(noPatternsMsg)}</div>
       <span class="overview-action-link overview-action-secondary" aria-disabled="true">${escapeHtml(openPatternsLabel)}</span>
@@ -1062,7 +1069,7 @@ export function renderOverviewPatternPreview(
   }
 
   return `
-    <div class="overview-section overview-pattern-preview">
+    <div class="overview-section overview-pattern-preview"${sectionIdAttr}>
       <h2 class="page-section-title section-title-caps">${escapeHtml(t.overview.repeatedPatterns)}</h2>
       <div class="overview-pattern-preview-list">${previewItems.join("")}</div>
       <a href="#patterns" class="overview-action-link planner-nav-link" data-nav="patterns">${escapeHtml(openPatternsLabel)}</a>

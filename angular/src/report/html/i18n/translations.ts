@@ -136,6 +136,25 @@ export interface Translations {
     dominantIssueExplanation?: string;
     topRiskExplanation?: string;
     severityExplanation?: string;
+    executiveSummary?: string;
+    executiveSummaryHelper?: string;
+    executiveScaleLabel?: string;
+    executiveRiskSignalsLabel?: string;
+    executiveAssessmentLabel?: string;
+    executiveDetailBelow?: string;
+    executivePrimaryFocus?: string;
+    executiveFirstStep?: string;
+    workspaceRiskLabel?: string;
+    basedOnAnalyzerSignals?: string;
+    componentsBySeverityLabel?: string;
+    priorityFocus?: string;
+    priorityFocusHelper?: string;
+    priorityFocusEmpty?: string;
+    hotspotKindComponent?: string;
+    hotspotKindRule?: string;
+    recommendedActions?: string;
+    recommendedActionsHelper?: string;
+    recommendedActionsEmpty?: string;
   };
   hero: {
     workspaceHealth: string;
@@ -784,6 +803,30 @@ export const en: Translations = {
     dominantIssueExplanation: "Dominant issue per component. Based on structural analysis.",
     topRiskExplanation: "Ranked by severity, size, and finding count.",
     severityExplanation: "Critical = highest risk; High = significant; Warning = moderate.",
+    executiveSummary: "Executive summary",
+    executiveSummaryHelper:
+      "High-level read of scale, risk signals, and where to start. Details follow in the sections below.",
+    executiveScaleLabel: "Scale",
+    executiveRiskSignalsLabel: "Risk signals",
+    executiveAssessmentLabel: "Assessment",
+    executiveDetailBelow: "Charts and lists on this page expand on these points.",
+    executivePrimaryFocus: "Primary focus",
+    executiveFirstStep: "Suggested first step",
+    workspaceRiskLabel: "Workspace risk",
+    basedOnAnalyzerSignals: "from analyzer signals",
+    componentsBySeverityLabel: "Components by highest severity",
+    priorityFocus: "Priority focus",
+    priorityFocusHelper:
+      "Cross-cutting diagnostics first, then the problematic-component shortlist. One rule-level item may appear when component signals are sparse.",
+    priorityFocusEmpty:
+      "No prioritized hotspots for this run—either a healthy snapshot or signals were too weak to rank confidently.",
+    hotspotKindComponent: "Component",
+    hotspotKindRule: "Rule",
+    recommendedActions: "Recommended actions",
+    recommendedActionsHelper:
+      "From analyzer messages, refactor hints, and high-impact rules. Duplicates removed.",
+    recommendedActionsEmpty:
+      "No bundled recommendations for this run. Use Components and Rules for file- and rule-level detail.",
   },
   hero: {
     workspaceHealth: "Workspace Health",
