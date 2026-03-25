@@ -16,6 +16,14 @@ export type DiagnosticCluster =
   | "orchestration_heavy"
   | "lifecycle_risky";
 
+/**
+ * Stable enum for integrations; use with diagnosticLabel for display text.
+ * - ranked: a primary architectural smell met the dominance threshold.
+ * - unranked: findings exist but none reached that threshold.
+ * - quiet: no counted cross-analyzer warnings for this component.
+ */
+export type DiagnosticStatus = "ranked" | "unranked" | "quiet";
+
 export type { ComponentRole };
 
 export interface DiagnosisEvidence {
@@ -31,7 +39,9 @@ export interface ComponentDiagnostic {
   dominantIssue: DominantIssueType | null;
   supportingIssues: DominantIssueType[];
   refactorDirection: string;
+  /** User-facing summary; when dominantIssue is null this is a neutral phrase, not an internal code. */
   diagnosticLabel: string;
+  diagnosticStatus: DiagnosticStatus;
   clusterScores: Record<DiagnosticCluster, number>;
   /** Per-component finding count (component + lifecycle + template + responsibility). */
   totalWarningCount: number;

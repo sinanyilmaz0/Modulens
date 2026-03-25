@@ -77,14 +77,16 @@ test("anomaly note for inferred severity uses refined wording", () => {
   assert.ok(line, "summary line should be defined");
   const value = line ?? "";
   assert.ok(
-    value.toLowerCase().includes("inferred from rule patterns") ||
-      value.toLowerCase().includes("inferred from rule"),
-    "anomaly note should explain that risk is inferred from rule patterns"
+    value.toLowerCase().includes("rule patterns") ||
+      value.toLowerCase().includes("several rule") ||
+      value.toLowerCase().includes("elevated risk"),
+    "anomaly note should reference combined rule signals without internal jargon"
   );
   assert.ok(
     !value.includes("Risk is inferred from rules; treat this as suspicious."),
     "legacy anomaly boilerplate should not appear"
   );
+  assert.ok(!/\binferred\b/i.test(value), "summary line should not expose the word 'inferred' to users");
 });
 
 test("metric-based hints still provide a concrete action", () => {

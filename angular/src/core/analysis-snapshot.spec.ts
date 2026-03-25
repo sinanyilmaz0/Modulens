@@ -7,6 +7,7 @@ import {
 import type { ScanResult } from "./scan-result";
 import { renderHtmlReport } from "../report/html/html-report-view";
 import { JsonFormatter } from "../formatters/json-formatter";
+import { getComponentDetailEntry } from "../report/html/html-report-presenter";
 
 function test(name: string, fn: () => void): void {
   try {
@@ -127,27 +128,30 @@ test("same snapshot => same totals in HTML and JSON", () => {
   const snapshot = createAnalysisSnapshot(result);
   const html = renderHtmlReport(snapshot);
   const jsonStr = new JsonFormatter().format(snapshot);
-  const json = JSON.parse(jsonStr);
+  const json = JSON.parse(jsonStr) as {
+    metadata: { runId: string };
+    workspace: { summary: { totalFindings: number; componentCount: number } };
+  };
 
-  assert.strictEqual(json._meta.runId, snapshot.runId);
-  assert.strictEqual(json.result.workspaceSummary.totalFindings, result.workspaceSummary.totalFindings);
-  assert.strictEqual(json.result.workspaceSummary.componentCount, result.workspaceSummary.componentCount);
+  assert.strictEqual(json.metadata.runId, snapshot.runId);
+  assert.strictEqual(json.workspace.summary.totalFindings, result.workspaceSummary.totalFindings);
+  assert.strictEqual(json.workspace.summary.componentCount, result.workspaceSummary.componentCount);
   assert.ok(html.includes(String(result.workspaceSummary.totalFindings)));
   assert.ok(html.includes(String(result.workspaceSummary.componentCount)));
 });
 
-test("componentsBySeverity.critical is preserved in snapshot JSON", () => {
+test("componentsBySeverity.critical is preserved in public JSON export", () => {
   const result = createMinimalResult({
     componentsBySeverity: { warning: 2, high: 1, critical: 2 },
   });
 
   const snapshot = createAnalysisSnapshot(result);
   const formatter = new JsonFormatter();
-  const json = JSON.parse(formatter.format(snapshot));
-
-  const exported = json.result as typeof result;
+  const json = JSON.parse(formatter.format(snapshot)) as {
+    health: { componentsBySeverity: { critical: number } };
+  };
   assert.strictEqual(
-    exported.componentsBySeverity.critical,
+    json.health.componentsBySeverity.critical,
     result.componentsBySeverity.critical
   );
 });
@@ -159,6 +163,43 @@ test("HTML contains __REPORT_META__ and run-id meta tag", () => {
   assert.ok(html.includes("__REPORT_META__"));
   assert.ok(html.includes(snapshot.runId));
   assert.ok(html.includes('name="modulens-run-id"'));
+});
+
+test("explorer merge copies triggeredRuleIds onto componentDetailsMap when diagnostics omit them", () => {
+  const base = createMinimalResult();
+  const result = createMinimalResult({
+    topProblematicComponents: [
+      {
+        filePath: "/test/workspace/src/app/c.component.ts",
+        fileName: "c.component.ts",
+        lineCount: 400,
+        dependencyCount: 4,
+        issues: [{ type: "component-size", severity: "WARNING", message: "Large component" }],
+        highestSeverity: "WARNING",
+      },
+    ],
+    diagnosticSummary: {
+      ...base.diagnosticSummary,
+      topCrossCuttingRisks: [],
+      componentDiagnostics: [],
+    },
+  });
+  const snapshot = createAnalysisSnapshot(result);
+  const entry = getComponentDetailEntry(snapshot.componentDetailsMap, "/test/workspace/src/app/c.component.ts");
+  assert.ok(entry);
+  assert.ok(entry.triggeredRuleIds?.includes("component-size"));
+});
+
+test("HTML report does not embed full __REPORT_SNAPSHOT__ or raw ScanResult script keys", () => {
+  const result = createMinimalResult({
+    allComponents: [{ filePath: "/extra/x.component.ts", fileName: "x.component.ts" } as never],
+  });
+  const snapshot = createAnalysisSnapshot(result);
+  const html = renderHtmlReport(snapshot);
+  assert.ok(!html.includes("__REPORT_SNAPSHOT__"));
+  assert.ok(html.includes("__PATH_TO_FAMILY__"));
+  assert.ok(!html.includes('"topProblematicComponents"'));
+  assert.ok(!html.includes('"diagnosticSummary"'));
 });
 
 test("parseSnapshot accepts version 1 snapshot", () => {

@@ -9,6 +9,7 @@ import type {
   ComponentDiagnostic,
   DiagnosisEvidence,
   DiagnosticCluster,
+  DiagnosticStatus,
   DiagnosticSummaryResult,
   DominantIssueType,
 } from "./diagnostic-models";
@@ -152,7 +153,16 @@ function buildComponentDiagnostic(
   const refactorDirection = dominantIssue
     ? REFACTOR_DIRECTIONS[dominantIssue]
     : "";
-  const diagnosticLabel = dominantIssue ?? "HEALTHY";
+  const diagnosticStatus: DiagnosticStatus = dominantIssue
+    ? "ranked"
+    : totalWarningCount > 0
+      ? "unranked"
+      : "quiet";
+  const diagnosticLabel = dominantIssue
+    ? dominantIssue
+    : totalWarningCount > 0
+      ? "Findings present; no primary ranked issue"
+      : "No primary ranked issue";
 
   const triggeredRuleIds = new Set<string>();
   for (const issue of component.issues) {
@@ -206,6 +216,7 @@ function buildComponentDiagnostic(
     supportingIssues,
     refactorDirection,
     diagnosticLabel,
+    diagnosticStatus,
     clusterScores,
     totalWarningCount,
     evidence,

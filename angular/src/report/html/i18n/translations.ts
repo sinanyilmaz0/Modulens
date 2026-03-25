@@ -300,6 +300,12 @@ export interface Translations {
     expectedOutcomeByIssue?: Record<string, string>;
     drawerWhyThisClassification?: string;
     drawerRoleHeuristicHelper?: string;
+    /** Short list from severityNotesForDisplay */
+    severityAssessmentTitle?: string;
+    /** No dominant issue and zero cross-analyzer warnings */
+    diagnosisQuiet?: string;
+    /** Warnings/findings but dominance threshold not met */
+    diagnosisUnranked?: string;
   };
   evidence: {
     lineCount: string;
@@ -645,6 +651,8 @@ export interface Translations {
     roleUnknown?: string;
     noDominantIssue?: string;
     showHealthyComponents?: string;
+    /** When filtering list to rows without a ranked primary smell */
+    showingWithoutRankedPrimary?: string;
     summaryProblematic?: string;
     summaryFlagged?: string;
     summarySortedBy?: string;
@@ -672,6 +680,7 @@ export interface Translations {
     critical: string;
     high: string;
     warning: string;
+    low?: string;
   };
 }
 
@@ -876,7 +885,7 @@ export const en: Translations = {
     critical: "Critical",
     high: "High",
     warning: "Warning",
-    low: "Low",
+    low: "Low (advisory)",
   },
   priority: {
     fixNow: "Fix Now",
@@ -937,7 +946,7 @@ export const en: Translations = {
     fileContext: "File context",
     heuristicsDetails: "Heuristics & confidence",
     sourceRoot: "Source root",
-    inferredFeatureArea: "Inferred feature area",
+    inferredFeatureArea: "Estimated feature area",
     sizeEvidence: "Size",
     templateEvidence: "Template",
     responsibilityEvidence: "Responsibility",
@@ -980,11 +989,17 @@ export const en: Translations = {
     },
     drawerWhyThisClassification: "Why this classification?",
     drawerRoleHeuristicHelper: "Role derived from structure; verify if needed.",
+    severityAssessmentTitle: "Severity assessment",
+    diagnosisQuiet:
+      "No primary ranked issue and no counted cross-analyzer warnings for this component.",
+    diagnosisUnranked:
+      "Findings exist, but none reached the threshold for a single primary ranked issue. Review rules and evidence in context.",
   },
   severityHint: {
     critical: "Highest risk; fix first",
     high: "High risk; address soon",
     warning: "Moderate risk; monitor",
+    low: "Lower priority; findings may still warrant review",
   },
   evidence: {
     lineCount: "Component size",
@@ -1398,11 +1413,11 @@ export const en: Translations = {
     multipleModerateIssuesElevated: "Multiple moderate issues; elevated overall risk",
     noSingleDominantButMultiRule:
       "No single dominant issue; multiple rules elevate risk",
-    showHealthyComponents: "Show healthy components",
+    showHealthyComponents: "Show components without a ranked primary issue",
     summaryProblematic: "Showing {range} of {count} problematic components",
     summaryFlagged: "Showing {showing} of {total} flagged components",
     summarySortedBy: "sorted by {sortLabel}",
-    healthyHidden: "— {count} healthy components hidden",
+    healthyHidden: "— {count} without a ranked primary issue hidden",
     filterHelper: "Filter by architectural smell or severity.",
     dominantIssueHelper: "The primary architectural smell for this component.",
     clearAll: "Clear all",
@@ -1410,11 +1425,12 @@ export const en: Translations = {
     partOfFamily: "Part of",
     sharedRefactorOpportunity: "Shared refactor opportunity",
     filteringBy: "Filtering by",
-    healthyHiddenChip: "Healthy hidden",
-    anomalyMetricsMissingLabel: "Derived from code signals",
+    healthyHiddenChip: "Without ranked primary hidden",
+    showingWithoutRankedPrimary: "Showing {showing} of {total} without a ranked primary issue",
+    anomalyMetricsMissingLabel: "Limited metric coverage—advisory interpretation",
     anomalyMetricsMissingHelper:
       "Derived from code signals; review evidence before acting.",
-    anomalySeverityInferredLabel: "Severity elevated by combined rule signals",
+    anomalySeverityInferredLabel: "Elevated from combined rule signals and risk score",
     anomalySeverityInferredHelper:
       "Based on multiple rule hits; review evidence.",
     anomalyGenericLabel: "Heuristic classification",

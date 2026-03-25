@@ -11,6 +11,7 @@ import {
 } from "../../angular/intelligence/decomposition";
 import { REPORT_STYLES } from "./styles";
 import { SIGNAL_DISPLAY_LABELS } from "./templates";
+import { buildHtmlClientComponentDetailsMap } from "./html-embedded-payload";
 import {
   escapeHtml,
   renderDashboardCard,
@@ -167,6 +168,8 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
     }
   }
 
+  const htmlClientDetailsMap = buildHtmlClientComponentDetailsMap(componentDetailsMap);
+
   const translationsJson = JSON.stringify(getTranslations()).replace(/<\/script>/gi, "<\\/script>");
   const debugAttrs = options.debug
     ? ` data-artifact-source-snapshot-id="${snapshot.runId}" data-aggregation-version="${snapshot.snapshotVersion}" data-data-source="snapshot"`
@@ -201,8 +204,8 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
 
   <script>
     window.__REPORT_META__ = ${JSON.stringify(snapshot.meta).replace(/<\/script>/gi, "<\\/script>")};
-    window.__REPORT_SNAPSHOT__ = ${JSON.stringify({ _meta: snapshot.meta, result: snapshot.result, componentDetailsMap: snapshot.componentDetailsMap, sections: snapshot.sections, patternData: snapshot.patternData, componentsExplorerItems: snapshot.componentsExplorerItems, pathToFamily: pathToFamily }).replace(/<\/script>/gi, "<\\/script>")};
-    window.__REPORT_DATA__ = ${JSON.stringify(componentDetailsMap).replace(/<\/script>/gi, "<\\/script>")};
+    window.__PATH_TO_FAMILY__ = ${JSON.stringify(pathToFamily).replace(/<\/script>/gi, "<\\/script>")};
+    window.__REPORT_DATA__ = ${JSON.stringify(htmlClientDetailsMap).replace(/<\/script>/gi, "<\\/script>")};
     window.__OTHER_MINOR_CLUSTERS__ = ${JSON.stringify(result.otherMinorClusters ?? []).replace(/<\/script>/gi, "<\\/script>")};
     window.__BREAKDOWN_MODE__ = ${JSON.stringify(result.breakdownMode ?? "feature-area").replace(/<\/script>/gi, "<\\/script>")};
     window.__PATTERN_DATA__ = ${JSON.stringify(patternData).replace(/<\/script>/gi, "<\\/script>")};
@@ -647,7 +650,9 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           var matchProject = !projectFilter || itemProject === projectFilter;
           var matchRule = !ruleFilter || itemRuleIds.indexOf(ruleFilter) >= 0;
           var matchStructure = !structurePathSet || structurePathSet.has(itemPath);
-          var isHealthy = itemIssue === "" || itemIssue === "NO_DOMINANT_ISSUE";
+          var warnCount = parseInt(row.getAttribute("data-warning-count") || "0", 10) || 0;
+          var elevatedSev = itemSeverity === "WARNING" || itemSeverity === "HIGH" || itemSeverity === "CRITICAL";
+          var isHealthy = (itemIssue === "" || itemIssue === "NO_DOMINANT_ISSUE") && warnCount === 0 && !elevatedSev;
           var matchHealthy = showHealthy || !isHealthy || issueType === "NO_DOMINANT_ISSUE";
           return matchIssue && matchSeverity && matchSearch && matchProject && matchHealthy && matchRule && matchStructure;
         }
@@ -684,6 +689,10 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           var filteringByLabel = (tComp && tComp.filteringBy) || "Filtering by";
           var problematicCount = rows.filter(function(r) {
             var i = r.getAttribute("data-issue-type") || "";
+            var wc = parseInt(r.getAttribute("data-warning-count") || "0", 10) || 0;
+            var sev = r.getAttribute("data-severity") || "";
+            var elevated = sev === "WARNING" || sev === "HIGH" || sev === "CRITICAL";
+            if (elevated || wc > 0) return true;
             return i !== "" && i !== "NO_DOMINANT_ISSUE";
           }).length;
           var healthyCount = rows.length - problematicCount;
@@ -699,7 +708,8 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           if (filterParts.length > 0) filterPrefix = filteringByLabel + " " + filterParts.join(" and ") + ". ";
           var mainText = "";
           if (issueType === "NO_DOMINANT_ISSUE") {
-            mainText = "Showing " + showingStr + " of " + totalVisible + " healthy components" + sortSuffix;
+            var noPrimaryTpl = (tComp && tComp.showingWithoutRankedPrimary) || "Showing {showing} of {total} without a ranked primary issue";
+            mainText = noPrimaryTpl.replace("{showing}", showingStr).replace("{total}", String(totalVisible)) + sortSuffix;
           } else if (showHealthy) {
             var sevParts = [];
             if (criticalCount > 0) sevParts.push(criticalCount + " critical");
@@ -1064,9 +1074,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
         var filterBySmellLabel = dt("drawer.filterBySameSmell") || "Filter by same issue type";
         var filterByProjectLabel = dt("drawer.filterBySameProject") || "Filter by same project";
         var copyPathLabel = dt("drawer.copyPath") || "Copy file path";
-        var pathKey = (entry.filePath || "").replace(/\\\\/g, "/");
-        var expItem = ((window.__REPORT_SNAPSHOT__ && window.__REPORT_SNAPSHOT__.componentsExplorerItems) || []).find(function(it) { return (it.filePath || "").replace(/\\\\/g, "/") === pathKey; });
-        var project = (expItem && expItem.project) || entry.sourceRoot || "";
+        var project = entry.sourceRoot || "";
         if (hasMeaningfulRefactor(entry)) {
           actions.push({ id: "copyRefactor", html: "<button type=\\"button\\" class=\\"btn-primary structure-copy-refactor-btn\\" data-refactor=\\"" + esc(refactorText) + "\\" data-why=\\"" + esc(whyItMatters) + "\\">" + esc(copyRefactorLabel) + "</button>" });
         }
@@ -1408,7 +1416,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           if (isHighOrCritical) {
             headline = "No single dominant issue was selected, but the combined rule set indicates elevated risk.";
           } else {
-            headline = "Severity is inferred from heuristic rules and weak metric signals.";
+            headline = "Severity reflects heuristic rules and limited metric coverage; confirm locally.";
           }
         } else {
           if (sev === "LOW") {
@@ -1515,13 +1523,6 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
       }
       function renderRelatedRules(entry, dt, esc) {
         var ruleIds = entry.triggeredRuleIds || [];
-        if (ruleIds.length === 0) {
-          var snapshot = window.__REPORT_SNAPSHOT__;
-          var items = (snapshot && snapshot.componentsExplorerItems) || [];
-          var pathKey = (entry.filePath || "").replace(/\\\\/g, "/");
-          var expItem = items.find(function(it) { return (it.filePath || "").replace(/\\\\/g, "/") === pathKey; });
-          if (expItem && expItem.triggeredRuleIds) ruleIds = expItem.triggeredRuleIds;
-        }
         if (ruleIds.length === 0) return "";
         var rulesById = window.__RULES_BY_ID__ || {};
         var ruleToAffected = window.__RULE_TO_AFFECTED__ || {};
@@ -1534,7 +1535,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
         return "<div class=\\"drawer-section drawer-related-rules\\"><h4 class=\\"drawer-section-title\\">" + (dt("drawer.relatedRules") || "Related rules") + "</h4><ul class=\\"drawer-related-rules-list\\">" + items + "</ul></div>";
       }
       function renderSimilarComponents(entry, dt, esc) {
-        var pathToFamily = (window.__REPORT_SNAPSHOT__ && window.__REPORT_SNAPSHOT__.pathToFamily) || {};
+        var pathToFamily = (typeof window.__PATH_TO_FAMILY__ !== "undefined" ? window.__PATH_TO_FAMILY__ : {}) || {};
         var pathKey = (entry.filePath || "").replace(/\\\\/g, "/");
         var familyInfo = pathToFamily[pathKey];
         if (!familyInfo) return "";
@@ -1554,8 +1555,15 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
         var diagnosisLine = entry.refactorDirection || entry.diagnosticLabel || (entry.dominantIssue ? (dt("patternExplanations." + entry.dominantIssue + ".meaning") || "") : "");
         if (diagnosisLine) diagnosisLine = diagnosisLine.substring(0, 150) + (diagnosisLine.length > 150 ? "..." : "");
         if (!diagnosisLine && entry.__fallback) diagnosisLine = dt("drawer.fallbackDiagnosis") || "Detailed diagnostics unavailable for this component.";
-        if (!diagnosisLine && !entry.dominantIssue)
-          diagnosisLine = dt("drawer.noDominantIssueExplanation") || "Signals are present but no single dominant issue clearly stands out. Review the evidence to decide where to focus.";
+        if (!diagnosisLine && !entry.dominantIssue) {
+          if (entry.diagnosticStatus === "quiet") {
+            diagnosisLine = dt("drawer.diagnosisQuiet") || "No primary ranked issue and no counted cross-analyzer warnings for this component.";
+          } else if (entry.diagnosticStatus === "unranked") {
+            diagnosisLine = dt("drawer.diagnosisUnranked") || "Findings exist, but none reached the threshold for a single primary ranked issue. Review rules and evidence in context.";
+          } else {
+            diagnosisLine = dt("drawer.noDominantIssueExplanation") || "Signals may be present; review evidence to decide where to focus.";
+          }
+        }
         html += "<div class=\\"drawer-section drawer-why-flagged\\"><h4 class=\\"drawer-section-title\\">" + (dt("drawer.whyFlagged") || "Why flagged") + "</h4><p class=\\"drawer-diagnosis-line drawer-diagnosis-one-liner\\">" + esc(diagnosisLine) + "</p>";
         html += renderDiagnosisSummary(entry, dt, esc) + "</div>";
         var whyItMatters = entry.dominantIssue ? (dt("patternExplanations." + entry.dominantIssue + ".whyItMatters") || "") : "";
@@ -1578,13 +1586,14 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
         html += renderFileContext(entry, dt, esc);
 
         var analysisNotes = [];
-        var conf = entry.confidence || (entry.anomalyFlag === "severity-missing-with-critical-rules" ? "inferred" : entry.anomalyFlag === "metrics-missing-with-warnings" ? "low" : null);
-        if (conf === "inferred" || conf === "low") {
-          var confidenceLabels = { inferred: "Severity elevated by combined rule signals", low: "Derived from code signals" };
-          analysisNotes.push(confidenceLabels[conf] || "Heuristic classification");
-        } else if (entry.anomalyFlag && entry.anomalyFlag !== "none") {
-          var anomalyLabels = { "severity-missing-with-critical-rules": "Severity elevated by combined rule signals", "metrics-missing-with-warnings": "Derived from code signals", default: "Heuristic classification" };
-          analysisNotes.push(anomalyLabels[entry.anomalyFlag] || anomalyLabels.default);
+        if (entry.severityTrustSummary) analysisNotes.push(entry.severityTrustSummary);
+        if (entry.severityNotesForDisplay && entry.severityNotesForDisplay.length) {
+          var sevTitle = dt("drawer.severityAssessmentTitle") || "Severity assessment";
+          html += "<div class=\\"drawer-section drawer-severity-notes drawer-meta-muted\\"><h4 class=\\"drawer-section-title\\">" + esc(sevTitle) + "</h4><ul class=\\"drawer-analysis-notes-list\\">";
+          for (var sn = 0; sn < entry.severityNotesForDisplay.length; sn++) {
+            html += "<li>" + esc(entry.severityNotesForDisplay[sn]) + "</li>";
+          }
+          html += "</ul></div>";
         }
         if (entry.roleConfidence != null && entry.roleConfidence < 0.4) {
           analysisNotes.push(dt("drawer.drawerRoleHeuristicHelper") || "Role derived from naming and structural signals.");
@@ -1741,7 +1750,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           document.body.setAttribute("data-initial-page", currentPage);
           var html = "<!DOCTYPE html>\\n" + document.documentElement.outerHTML;
           document.body.removeAttribute("data-initial-page");
-          var wp = (window.__REPORT_META__ && window.__REPORT_META__.workspacePath) || (window.__REPORT_SNAPSHOT__ && window.__REPORT_SNAPSHOT__._meta && window.__REPORT_SNAPSHOT__._meta.workspacePath) || (window.__REPORT_SNAPSHOT__ && window.__REPORT_SNAPSHOT__.result && window.__REPORT_SNAPSHOT__.result.workspacePath) || "";
+          var wp = (window.__REPORT_META__ && window.__REPORT_META__.workspacePath) || "";
           var segments = wp.replace(/\\\\/g, "/").replace(/\\/$/, "").split("/");
           var baseName = segments.length ? segments[segments.length - 1] : "report";
           var sanitized = baseName.replace(/[\\\\/:*?"<>|]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "report";
