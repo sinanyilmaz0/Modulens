@@ -19,6 +19,7 @@ import {
 } from "../report/html/html-report-presenter";
 import { getProjectForPath } from "../report/report-view-model";
 import { buildPatternData } from "../report/html/pattern-data-builder";
+import { getConfidenceLabel } from "../report/labels/uncertainty-copy";
 
 export const CURRENT_SNAPSHOT_VERSION = 1;
 
@@ -107,17 +108,40 @@ export function createAnalysisSnapshot(result: ScanResult, analyzerVersion?: str
         dominantIssue: item.dominantIssue,
         highestSeverity: item.highestSeverity,
         componentRole: item.componentRole,
-        sourceRoot: item.sourceRoot ?? getProjectForPath(item.filePath, result.projectBreakdown) ?? undefined,
+        sourceRoot:
+          item.sourceRoot ??
+          item.project ??
+          getProjectForPath(item.filePath, result.projectBreakdown) ??
+          undefined,
         inferredFeatureArea: item.inferredFeatureArea ?? undefined,
+        triggeredRuleIds: item.triggeredRuleIds,
         anomalyFlag: item.anomalyFlag,
         anomalyReasons: item.anomalyReasons,
         confidence: item.confidence,
+        computedSeverity: item.computedSeverity,
+        severityNotesForDisplay: item.severityNotesForDisplay,
       };
     } else {
       existing.anomalyFlag = item.anomalyFlag;
       existing.anomalyReasons = item.anomalyReasons;
       existing.confidence = item.confidence;
+      existing.computedSeverity = item.computedSeverity ?? existing.computedSeverity;
+      existing.severityNotesForDisplay = item.severityNotesForDisplay ?? existing.severityNotesForDisplay;
+      if (!existing.sourceRoot) {
+        existing.sourceRoot =
+          item.sourceRoot ?? item.project ?? getProjectForPath(item.filePath, result.projectBreakdown) ?? undefined;
+      }
+      if (item.triggeredRuleIds?.length && !existing.triggeredRuleIds?.length) {
+        existing.triggeredRuleIds = item.triggeredRuleIds;
+      }
     }
+  }
+
+  for (const key of Object.keys(mapWithExplorer)) {
+    const e = mapWithExplorer[key];
+    if (!e) continue;
+    const trust = getConfidenceLabel(e.confidence ?? null);
+    e.severityTrustSummary = trust ?? undefined;
   }
 
   const patternData = buildPatternData(result, mapWithExplorer);

@@ -1556,9 +1556,6 @@ export function renderComponentExplorerRow(
   const dependencyCountAttr = item.dependencyCount != null ? String(item.dependencyCount) : "";
   const templateLinesAttr = item.templateLineCount != null ? String(item.templateLineCount) : "";
   const warningCountAttr = item.totalWarningCount != null ? String(item.totalWarningCount) : "0";
-  const anomalyAttr = item.anomalyFlag ?? "none";
-  const confidenceAttr = item.confidence ?? (item.anomalyFlag === "severity-missing-with-critical-rules" ? "inferred" : item.anomalyFlag === "metrics-missing-with-warnings" ? "low" : "measured");
-  const anomalyReasonsAttr = (item.anomalyReasons ?? []).join("; ");
 
   const patternKeyAttr = item.patternKey && item.patternKey !== "NO_DOMINANT_ISSUE" ? `data-pattern-key="${escapeHtml(item.patternKey)}"` : "";
   const dataAttrs = [
@@ -1575,9 +1572,6 @@ export function renderComponentExplorerRow(
     `data-warning-count="${escapeHtml(warningCountAttr)}"`,
     `data-risk-score="${riskScore}"`,
     `data-name="${escapeHtml(displayName.toLowerCase())}"`,
-    `data-anomaly="${escapeHtml(anomalyAttr)}"`,
-    `data-confidence="${escapeHtml(confidenceAttr)}"`,
-    anomalyReasonsAttr ? `data-anomaly-reasons="${escapeHtml(anomalyReasonsAttr)}"` : "",
     ruleIdsAttr,
   ].filter(Boolean).join(" ");
   const actionText = item.actionSuggestion ?? (item.summaryLine ? (item.summaryLine.length > 65 ? item.summaryLine.substring(0, 65) + "…" : item.summaryLine) : "");

@@ -1,16 +1,9 @@
 import type { Formatter } from "./types";
 import type { AnalysisSnapshot } from "../core/analysis-snapshot";
+import { buildPublicJsonExport } from "../export/public-json-export";
 
 export class JsonFormatter implements Formatter {
   format(snapshot: AnalysisSnapshot): string {
-    const output = {
-      _meta: snapshot.meta,
-      result: snapshot.result,
-      componentDetailsMap: snapshot.componentDetailsMap,
-      sections: snapshot.sections,
-      patternData: snapshot.patternData,
-      componentsExplorerItems: snapshot.componentsExplorerItems,
-    };
-    return JSON.stringify(output, null, 2);
+    return JSON.stringify(buildPublicJsonExport(snapshot), null, 2);
   }
 }

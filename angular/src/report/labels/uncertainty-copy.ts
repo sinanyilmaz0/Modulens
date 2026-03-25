@@ -35,16 +35,16 @@ export const ANOMALY_SECONDARY_LABELS: Record<
   string
 > = {
   "severity-missing-with-critical-rules":
-    "Severity elevated by combined rule signals",
-  "metrics-missing-with-warnings": "Derived from code signals",
+    "Elevated from combined rule signals and risk score",
+  "metrics-missing-with-warnings": "Limited metric coverage—advisory interpretation",
   default: "Heuristic classification",
 };
 
 /** Confidence → secondary label (for drawer / Analysis notes). Prefer over getAnomalySecondaryLabel. */
 export const CONFIDENCE_LABELS: Record<"measured" | "inferred" | "low", string> = {
-  measured: "Severity backed by component metrics",
-  inferred: "Severity elevated by combined rule signals",
-  low: "Derived from code signals",
+  measured: "Backed by file-size and dependency metrics",
+  inferred: "Elevated from combined rule signals and risk score",
+  low: "Limited metric coverage—advisory interpretation",
 };
 
 export function getAnomalySecondaryLabel(

@@ -755,7 +755,7 @@ const RULE_GROUP_PRIORITY: RuleGroup[] = [
 const CONFIDENCE_NOTES: Record<SeverityConfidence, string | undefined> = {
   measured: undefined,
   inferred:
-    "Risk inferred from rule patterns rather than a single dominant issue; review evidence before acting.",
+    "Several rule patterns together suggest elevated risk; review evidence before acting.",
   low: "Metrics are partial for this component; review evidence before acting.",
 };
 

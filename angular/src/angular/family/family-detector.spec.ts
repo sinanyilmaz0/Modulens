@@ -26,7 +26,8 @@ function createMockInput(overrides: Partial<FamilyDetectionInput> = {}): FamilyD
     dominantIssue: null,
     supportingIssues: [] as never[],
     refactorDirection: "",
-    diagnosticLabel: "",
+    diagnosticLabel: "No primary ranked issue",
+    diagnosticStatus: "quiet" as const,
     clusterScores: {} as never,
     totalWarningCount: 0,
     evidence: [],
@@ -194,8 +195,8 @@ test("similar form family (user-form, user-settings-form) with aligned metrics c
       { filePath: "/workspace/app/user-settings-form.component.ts", fileName: "user-settings-form.component.ts", lineCount: 115, dependencyCount: 5, issues: [] },
     ],
     componentDiagnostics: [
-      { filePath: "", fileName: "", className: "", dominantIssue: "ORCHESTRATION_HEAVY_COMPONENT", supportingIssues: [], refactorDirection: "", diagnosticLabel: "", clusterScores: {} as never, totalWarningCount: 0, evidence: [], componentRole: "form" as const, roleConfidence: 0.8 },
-      { filePath: "", fileName: "", className: "", dominantIssue: "ORCHESTRATION_HEAVY_COMPONENT", supportingIssues: [], refactorDirection: "", diagnosticLabel: "", clusterScores: {} as never, totalWarningCount: 0, evidence: [], componentRole: "form" as const, roleConfidence: 0.8 },
+      { filePath: "", fileName: "", className: "", dominantIssue: "ORCHESTRATION_HEAVY_COMPONENT", supportingIssues: [], refactorDirection: "", diagnosticLabel: "ORCHESTRATION_HEAVY_COMPONENT", diagnosticStatus: "ranked" as const, clusterScores: {} as never, totalWarningCount: 0, evidence: [], componentRole: "form" as const, roleConfidence: 0.8 },
+      { filePath: "", fileName: "", className: "", dominantIssue: "ORCHESTRATION_HEAVY_COMPONENT", supportingIssues: [], refactorDirection: "", diagnosticLabel: "ORCHESTRATION_HEAVY_COMPONENT", diagnosticStatus: "ranked" as const, clusterScores: {} as never, totalWarningCount: 0, evidence: [], componentRole: "form" as const, roleConfidence: 0.8 },
     ],
     templateResults: [
       { filePath: "", fileName: "", className: "", hasTemplate: true, templateSource: "inline", metrics: { lineCount: 40, interpolationCount: 5, propertyBindingCount: 15, eventBindingCount: 8, twoWayBindingCount: 0, ngIfCount: 4, ngForCount: 0, atForCount: 0, atIfCount: 0, ngTemplateCount: 0, ngContainerCount: 0, structuralDepth: 3, methodCallCount: 5, longExpressionCount: 0, trackByCount: 0 }, warnings: [], score: 8, riskLevel: "Low" },
@@ -246,8 +247,8 @@ test("small groups (2-3 members) require higher threshold", () => {
       { filePath: "/workspace/app/bar-card.component.ts", fileName: "bar-card.component.ts", lineCount: 45, dependencyCount: 3, issues: [] },
     ],
     componentDiagnostics: [
-      { filePath: "", fileName: "", className: "", dominantIssue: null, supportingIssues: [], refactorDirection: "", diagnosticLabel: "", clusterScores: {} as never, totalWarningCount: 0, evidence: [], componentRole: "widget" as const, roleConfidence: 0.5 },
-      { filePath: "", fileName: "", className: "", dominantIssue: null, supportingIssues: [], refactorDirection: "", diagnosticLabel: "", clusterScores: {} as never, totalWarningCount: 0, evidence: [], componentRole: "widget" as const, roleConfidence: 0.5 },
+      { filePath: "", fileName: "", className: "", dominantIssue: null, supportingIssues: [], refactorDirection: "", diagnosticLabel: "No primary ranked issue", diagnosticStatus: "quiet" as const, clusterScores: {} as never, totalWarningCount: 0, evidence: [], componentRole: "widget" as const, roleConfidence: 0.5 },
+      { filePath: "", fileName: "", className: "", dominantIssue: null, supportingIssues: [], refactorDirection: "", diagnosticLabel: "No primary ranked issue", diagnosticStatus: "quiet" as const, clusterScores: {} as never, totalWarningCount: 0, evidence: [], componentRole: "widget" as const, roleConfidence: 0.5 },
     ],
     templateResults: [
       { filePath: "", fileName: "", className: "", hasTemplate: true, templateSource: "inline", metrics: { lineCount: 15, interpolationCount: 2, propertyBindingCount: 5, eventBindingCount: 1, twoWayBindingCount: 0, ngIfCount: 1, ngForCount: 0, atForCount: 0, atIfCount: 0, ngTemplateCount: 0, ngContainerCount: 0, structuralDepth: 2, methodCallCount: 2, longExpressionCount: 0, trackByCount: 0 }, warnings: [], score: 8, riskLevel: "Low" },

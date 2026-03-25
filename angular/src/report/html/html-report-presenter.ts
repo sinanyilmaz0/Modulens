@@ -1,6 +1,6 @@
 import type { ScanResult } from "../../core/scan-result";
 import type { ComponentFamily } from "../../angular/family/family-models";
-import type { DiagnosisEvidence } from "../../diagnostic/diagnostic-models";
+import type { DiagnosisEvidence, DiagnosticStatus } from "../../diagnostic/diagnostic-models";
 import type { ConfidenceBreakdown } from "../../confidence/confidence-models";
 import { RULES_REGISTRY, type RuleSeverity } from "../../rules/rule-registry";
 import {
@@ -15,6 +15,7 @@ import {
   resolveFinalSeverity,
   type SeverityConfidence,
 } from "../severity/severity-resolver";
+import { mapSeverityReasonsForDisplay } from "../presentation/severity-reason-copy";
 
 export function normalizePath(p: string): string {
   return p.replace(/\\/g, "/");
@@ -126,6 +127,16 @@ export interface ComponentDetailEntry {
   confidence?: SeverityConfidence;
   anomalyFlag?: "metrics-missing-with-warnings" | "severity-missing-with-critical-rules" | "none";
   anomalyReasons?: string[];
+  /** Canonical severity reconciled with rules + risk score (matches Components explorer). */
+  computedSeverity?: CanonicalSeverityCode;
+  /** User-facing lines derived from internal anomalyReasons. */
+  severityNotesForDisplay?: string[];
+  /** From full diagnostic consolidation (all components). */
+  diagnosticStatus?: DiagnosticStatus;
+  /** One-line severity trust hint for HTML client (no raw confidence enum). */
+  severityTrustSummary?: string | null;
+  /** Rule IDs for this component (drawer related-rules + explorer). */
+  triggeredRuleIds?: string[];
 }
 
 export function buildComponentDetailsMap(result: ScanResult): Record<string, ComponentDetailEntry> {
@@ -148,6 +159,7 @@ export function buildComponentDetailsMap(result: ScanResult): Record<string, Com
     map[key].supportingIssues = d.supportingIssues ?? [];
     map[key].refactorDirection = d.refactorDirection;
     map[key].diagnosticLabel = d.diagnosticLabel;
+    map[key].diagnosticStatus = d.diagnosticStatus;
     map[key].evidence = d.evidence;
     map[key].componentRole = d.componentRole;
     map[key].roleConfidence = d.roleConfidence;
@@ -160,11 +172,18 @@ export function buildComponentDetailsMap(result: ScanResult): Record<string, Com
   for (const d of result.diagnosticSummary.componentDiagnostics ?? []) {
     const key = normalizePath(d.filePath);
     if (!map[key]) map[key] = { filePath: d.filePath, fileName: d.fileName, className: d.className ?? undefined };
+    map[key].dominantIssue = d.dominantIssue;
+    map[key].supportingIssues = d.supportingIssues ?? [];
+    map[key].refactorDirection = d.refactorDirection;
+    map[key].diagnosticLabel = d.diagnosticLabel;
+    map[key].diagnosticStatus = d.diagnosticStatus;
     map[key].componentRole = d.componentRole;
     map[key].roleConfidence = d.roleConfidence;
     map[key].roleSignals = d.roleSignals;
     map[key].roleConfidenceBreakdown = d.roleConfidenceBreakdown;
     map[key].evidence = d.evidence;
+    map[key].rankingReason = d.rankingReason;
+    map[key].triggeredRuleIds = d.triggeredRuleIds?.length ? [...d.triggeredRuleIds] : map[key].triggeredRuleIds;
     if (d.decompositionSuggestion) map[key].decompositionSuggestion = d.decompositionSuggestion;
   }
 
@@ -405,6 +424,8 @@ export interface ComponentsExplorerItem {
   /** @deprecated Use confidence instead. Kept for backward compatibility with older snapshots. */
   anomalyFlag?: "metrics-missing-with-warnings" | "severity-missing-with-critical-rules" | "none";
   anomalyReasons?: string[];
+  /** User-facing severity notes (mapped from anomalyReasons). */
+  severityNotesForDisplay?: string[];
 }
 
 export function buildComponentsExplorerItems(result: ScanResult): ComponentsExplorerItem[] {
@@ -701,6 +722,8 @@ export function buildComponentsExplorerItems(result: ScanResult): ComponentsExpl
     } else {
       item.anomalyFlag = "none";
     }
+
+    item.severityNotesForDisplay = mapSeverityReasonsForDisplay(item.anomalyReasons);
 
     // Update debug counters.
     debugTotalRows++;

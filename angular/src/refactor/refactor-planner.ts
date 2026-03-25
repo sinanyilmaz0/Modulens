@@ -487,7 +487,8 @@ export function buildTopRefactorTargets(result: ScanResult): TopRefactorTarget[]
         dominantIssue: null,
         supportingIssues: [],
         refactorDirection: "Review component size and responsibilities.",
-        diagnosticLabel: "",
+        diagnosticLabel: "No primary ranked issue",
+        diagnosticStatus: "quiet",
         clusterScores: {
           template_heavy: 0,
           god_component: 0,
