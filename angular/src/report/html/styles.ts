@@ -1090,10 +1090,21 @@ button.overview-hotspot-name-link:hover {
   flex-direction: column;
   gap: 12px;
 }
+.components-search-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
 .components-search-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   width: 100%;
 }
 .components-search-wrap .components-search-input {
+  flex: 1 1 200px;
   width: 100%;
   max-width: 420px;
   padding: 10px 14px;
@@ -1105,6 +1116,39 @@ button.overview-hotspot-name-link:hover {
 }
 .components-search-wrap .components-search-input::placeholder {
   color: var(--color-text-muted);
+}
+.components-search-clear {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  font-size: 13px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.components-search-clear:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+.components-search-clear:focus-visible {
+  outline: 2px solid var(--color-accent, #3b82f6);
+  outline-offset: 2px;
+}
+.components-search-helper {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 52rem;
+}
+.components-search-match-count {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+.components-search-match-count:empty {
+  display: none;
 }
 .components-explorer-filters-row {
   display: flex;
@@ -1164,7 +1208,7 @@ button.overview-hotspot-name-link:hover {
   color: var(--color-text-secondary);
 }
 .active-filter-chip-label {
-  max-width: 140px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1212,6 +1256,35 @@ button.overview-hotspot-name-link:hover {
   line-height: 1.45;
   background: var(--color-bg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.components-summary-primary {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.components-summary-secondary {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.components-sort-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.components-sort-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.components-sort-helper {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  max-width: 28rem;
 }
 
 .component-explorer-list {
@@ -1599,7 +1672,7 @@ button.overview-hotspot-name-link:hover {
     gap: 6px 10px;
   }
   .active-filter-chip-label {
-    max-width: 80px;
+    max-width: 120px;
   }
 }
 
@@ -2793,6 +2866,71 @@ td.severity.warning { color: var(--color-warning); }
 .rule-card-suggested-action { font-size: 12px; color: var(--color-accent); margin: 6px 0 0 0; font-weight: 500; }
 .rule-impact-band-drawer { margin: 12px 0; }
 .rule-common-false-positives { margin: 0 0 12px 0; font-size: 13px; color: var(--color-text-muted); font-style: italic; }
+
+.rule-drawer-detail .rule-detail-id-line {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+.rule-detail-meta-label { font-weight: 600; color: var(--color-text-muted); margin-right: 6px; }
+.rule-detail-id-code {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+}
+.rule-detail-limited-badge {
+  margin: 0 0 10px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.rule-detail-more {
+  margin: 14px 0 16px 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  background: var(--color-surface-elevated);
+}
+.rule-detail-more-summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.rule-detail-more-body { margin-top: 12px; padding-top: 4px; border-top: 1px solid var(--color-border); }
+.rule-detail-more-body .rule-section-label:first-child { margin-top: 0; }
+
+.drawer-related-rule-item { margin-bottom: 10px; }
+.drawer-related-rule-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.drawer-related-rule-title-btn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-accent);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.drawer-related-rule-title-btn:hover { color: var(--color-text); }
+.drawer-related-rule-meta { font-size: 12px; color: var(--color-text-muted); }
+.drawer-related-rule-filter-link {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+.drawer-related-rule-filter-link:hover { text-decoration: underline; color: var(--color-text-secondary); }
 
 .top-actionable-rules-section {
   margin-bottom: 28px;

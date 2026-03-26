@@ -1454,6 +1454,8 @@ export interface ComponentExplorerRowInput {
   familyName?: string | null;
   isExtractionCandidate?: boolean;
   triggeredRuleIds?: string[];
+  /** Precomputed lowercase substring blob for `data-search` (names, paths, issues, rules, families). */
+  explorerSearchText?: string;
   // Normalized component-level severity and risk information coming from the canonical row model.
   computedRiskScore?: number;
   computedSeverity?: CanonicalSeverityCode;
@@ -1542,7 +1544,9 @@ export function renderComponentExplorerRow(
   const severityPill = `<span class="severity-pill severity-pill-${severityClass}">${escapeHtml(severityLabel)}</span>`;
   const componentsText = t.components as Record<string, string | undefined>;
   const displayName = item.className || item.fileName.replace(/\.component\.ts$/, "");
-  const searchText = [displayName, item.className ?? "", item.filePath].filter(Boolean).join(" ").toLowerCase();
+  const searchText =
+    (item.explorerSearchText && item.explorerSearchText.trim()) ||
+    [displayName, item.className ?? "", item.filePath].filter(Boolean).join(" ").toLowerCase();
   const severityOrder = { CRITICAL: 3, HIGH: 2, WARNING: 1, LOW: 0 } as const;
   const riskScore =
     typeof item.computedRiskScore === "number"
@@ -1621,26 +1625,39 @@ export function renderComponentsSummaryStrip(
   t: Translations,
   range?: { start: number; end: number }
 ): string {
-  const parts: string[] = [];
-  const summaryShowing = (t.components as Record<string, string>).summaryShowing ?? "Showing";
-  const summaryOf = (t.components as Record<string, string>).summaryOf ?? "of";
-  const summaryRange = (t.components as Record<string, string>).summaryRange ?? "Showing {start}-{end} of {total}";
-  const criticalLabel = (t.components as Record<string, string>).critical ?? "critical";
-  const highLabel = (t.components as Record<string, string>).high ?? "high";
+  const tc = t.components as Record<string, string>;
+  const tf = t.filters as Record<string, string>;
+  const summaryShowing = tc.summaryShowing ?? "Showing";
+  const summaryOf = tc.summaryOf ?? "of";
+  const primaryRangeTpl =
+    tc.summaryPrimaryRange ?? "Showing {start}–{end} of {matching} matching · {listTotal} in this list";
+  const sortDefault = tf.sortHighestRisk ?? "Highest risk";
+  let primary: string;
   if (range) {
-    parts.push(summaryRange.replace("{start}", String(range.start)).replace("{end}", String(range.end)).replace("{total}", String(total)) + " components");
+    primary = primaryRangeTpl
+      .replace("{start}", String(range.start))
+      .replace("{end}", String(range.end))
+      .replace("{matching}", String(total))
+      .replace("{listTotal}", String(total));
   } else {
-    parts.push(`${summaryShowing} ${showing} ${summaryOf} ${total} components`);
+    primary = `${summaryShowing} ${showing} ${summaryOf} ${total} components`;
   }
+  const secondaryParts: string[] = [];
+  secondaryParts.push((tc.summarySecondarySorted ?? "Sorted by {sortLabel}.").replace("{sortLabel}", sortDefault));
   if (criticalCount > 0 || highCount > 0) {
-    const severityParts: string[] = [];
-    if (criticalCount > 0) severityParts.push(`${criticalCount} ${criticalLabel}`);
-    if (highCount > 0) severityParts.push(`${highCount} ${highLabel}`);
-    parts.push(severityParts.join(" · "));
+    secondaryParts.push(
+      (tc.summarySecondarySeverityInView ?? "In current results: {critical} critical · {high} high.")
+        .replace("{critical}", String(criticalCount))
+        .replace("{high}", String(highCount))
+    );
   }
-  if (dominantLabel) parts.push(`Dominant: ${dominantLabel}`);
-  if (sourceLabel) parts.push(`Source: ${sourceLabel}`);
-  return `<div class="components-summary-strip">${parts.join(" · ")}</div>`;
+  if (dominantLabel && dominantLabel !== "all") secondaryParts.push(`Dominant: ${dominantLabel}`);
+  if (sourceLabel && sourceLabel !== "all") secondaryParts.push(`Source: ${sourceLabel}`);
+  const secondary = secondaryParts.join(" ");
+  return `<div class="components-summary-strip" role="status" aria-live="polite">
+    <div class="components-summary-primary" id="components-summary-primary">${escapeHtml(primary)}</div>
+    <div class="components-summary-secondary" id="components-summary-secondary">${escapeHtml(secondary)}</div>
+  </div>`;
 }
 
 export function renderSection(
