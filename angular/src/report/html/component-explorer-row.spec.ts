@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { renderComponentExplorerRow } from "./templates";
 import { getTranslations } from "./i18n/translations";
+import { getRuleById } from "../../rules/rule-registry";
 
 function test(name: string, fn: () => void): void {
   try {
@@ -41,4 +42,44 @@ test("explorer row does not leak internal anomaly attributes or raw resolver tex
   assert.ok(!html.includes("No component-size baseline"));
   assert.ok(!html.includes("severity-missing-with-critical-rules"));
   assert.ok(!html.includes('confidence="inferred"'));
+});
+
+test("explorer row data-search includes precomputed blob (rules, diagnostic, family, pattern)", () => {
+  const rule = getRuleById("GOD_COMPONENT_SMELL");
+  assert.ok(rule?.title);
+  const explorerSearchText = [
+    "mywidget",
+    "src/app/my-widget.component.ts",
+    "god component",
+    "diagnostic-heavy-ui",
+    "GOD_COMPONENT",
+    "checkout family",
+    "GOD_COMPONENT_SMELL",
+    rule!.title,
+  ]
+    .join(" ")
+    .toLowerCase();
+  const html = renderComponentExplorerRow(
+    {
+      filePath: "src/app/my-widget.component.ts",
+      fileName: "my-widget.component.ts",
+      className: "MyWidget",
+      dominantIssue: "GOD_COMPONENT",
+      mainIssueFormatted: "God component",
+      computedSeverity: "HIGH",
+      totalWarningCount: 1,
+      confidence: "measured",
+      triggeredRuleIds: ["GOD_COMPONENT_SMELL"],
+      explorerSearchText,
+      familyName: "Checkout family",
+      patternKey: "GOD_COMPONENT",
+    },
+    (issue) => issue ?? "",
+    t
+  );
+  assert.ok(html.includes('data-search="'));
+  assert.ok(html.includes("god_component_smell"));
+  assert.ok(html.includes("god component smell"));
+  assert.ok(html.includes("diagnostic-heavy-ui"));
+  assert.ok(html.includes("checkout family"));
 });

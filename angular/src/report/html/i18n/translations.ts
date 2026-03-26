@@ -228,6 +228,7 @@ export interface Translations {
     copySuccessSteps?: string;
     copyFailed?: string;
     copyFailedAlert?: string;
+    clearSearch?: string;
   };
   empty: {
     noRefactorTasks: string;
@@ -238,6 +239,10 @@ export interface Translations {
     noMatchFilters?: string;
     noMatchFiltersHint?: string;
     noMatchFiltersDetail?: string;
+    noMatchSearch?: string;
+    noMatchSearchHint?: string;
+    /** When both search and filters may apply */
+    noMatchCombinedHint?: string;
     noRepeatedArchitecture?: string;
     noFeaturePatterns?: string;
   };
@@ -290,7 +295,6 @@ export interface Translations {
     openInPatterns?: string;
     openInRefactorPlan?: string;
     filterBySameSmell?: string;
-    filterBySameProject?: string;
     suggestedFirstRefactor?: string;
     relatedRules?: string;
     similarComponents?: string;
@@ -343,6 +347,10 @@ export interface Translations {
     all: string;
     sortBy?: string;
     searchPlaceholder?: string;
+    /** Accessible name when placeholder is not sufficient */
+    searchAriaLabel?: string;
+    /** Short hint below search (what fields are matched) */
+    searchHelper?: string;
     componentRole?: string;
     allRoles?: string;
     sortHighestRisk?: string;
@@ -351,6 +359,10 @@ export interface Translations {
     sortTemplateComplexity?: string;
     sortWarningCount?: string;
     sortName?: string;
+    /** Severity from component data, highest first (CRITICAL → LOW) */
+    sortSeverity?: string;
+    /** Shown near sort control (accessibility / hint) */
+    sortHelper?: string;
     pageSize?: string;
   };
   structure: {
@@ -500,6 +512,15 @@ export interface Translations {
     impactBandLocalMaintainability?: string;
     impactBandCrossCutting?: string;
     impactBandBehaviorLeakRisk?: string;
+    /** Rule detail drawer — id label */
+    ruleDetailRuleId?: string;
+    ruleDetailWhatItDetects?: string;
+    ruleDetailNextStep?: string;
+    ruleDetailMoreExamples?: string;
+    ruleDetailLimited?: string;
+    ruleDetailUnknownBody?: string;
+    /** Related rules: secondary link to Components filter */
+    relatedRulesShowInList?: string;
   };
   planner: {
     title: string;
@@ -661,6 +682,32 @@ export interface Translations {
     dominantIssueHelper?: string;
     clearAll?: string;
     clearAllFilters?: string;
+    /** Shown when search text is non-zero; {count} = matches after search + filters (all pages) */
+    searchMatchCount?: string;
+    /** aria-label for the active-filter chip region */
+    activeFiltersRegion?: string;
+    /** Remove chip; {label} = chip text */
+    chipRemove?: string;
+    summaryPrimaryEmpty?: string;
+    /** {start} {end} {matching} {listTotal} */
+    summaryPrimaryRange?: string;
+    /** Appended when workspace total ≠ list length; {workspaceTotal} */
+    summaryWorkspaceSegment?: string;
+    /** {sortLabel} */
+    summarySecondarySorted?: string;
+    /** {count} hidden healthy-style rows */
+    summarySecondaryHealthyHidden?: string;
+    summarySecondarySearch?: string;
+    summarySecondaryNoDominantView?: string;
+    /** {critical} {high} in current matching set */
+    summarySecondarySeverityInView?: string;
+    chipSearch?: string;
+    chipIssue?: string;
+    chipSeverity?: string;
+    chipArea?: string;
+    chipRule?: string;
+    chipProject?: string;
+    chipSort?: string;
     partOfFamily?: string;
     sharedRefactorOpportunity?: string;
     filteringBy?: string;
@@ -909,6 +956,7 @@ export const en: Translations = {
     copySuccessSteps: "Refactor steps copied",
     copyFailed: "Copy failed",
     copyFailedAlert: "Copy failed. Clipboard permission may be unavailable. Try selecting and copying manually.",
+    clearSearch: "Clear search",
   },
   empty: {
     noRefactorTasks: "No refactor tasks yet. Run a full analysis to see prioritized work.",
@@ -919,7 +967,10 @@ export const en: Translations = {
     noMatchFilters: "No matches for current filters. Clear filters or adjust criteria.",
     noMatchFiltersHint: "Adjust filters or clear them to see results.",
     noMatchFiltersDetail:
-      "Active filters shown as chips above. Clear chips or use the button below to reset.",
+      "Active filters appear as chips under the filter bar. Remove a chip or use Clear all filters.",
+    noMatchSearch: "No components match your search.",
+    noMatchSearchHint: "Try different keywords, clear the search box, or adjust filters.",
+    noMatchCombinedHint: "Try clearing search, removing filter chips, or using Clear all filters.",
     noRepeatedArchitecture: "No strong repeated architecture patterns detected. This usually indicates that there are no high-confidence shared architecture families across components.",
     noFeaturePatterns: "No repeated feature implementations detected. This usually indicates that feature implementations are not duplicated across multiple components.",
   },
@@ -973,7 +1024,6 @@ export const en: Translations = {
     openInPatterns: "Open in Patterns",
     openInRefactorPlan: "Open in refactor plan",
     filterBySameSmell: "Filter by same issue type",
-    filterBySameProject: "Filter by same project",
     suggestedFirstRefactor: "Suggested first refactor",
     relatedRules: "Related rules",
     similarComponents: "Similar components / same family",
@@ -1076,7 +1126,9 @@ export const en: Translations = {
     severity: "Severity",
     all: "All",
     sortBy: "Sort by",
-    searchPlaceholder: "Search component, class, path...",
+    searchPlaceholder: "Search components…",
+    searchAriaLabel: "Search components by name, path, issue, rules, or family",
+    searchHelper: "Matches names, file paths, dominant issues, diagnostics, rule ids/titles, patterns, and families.",
     componentRole: "Component role",
     allRoles: "All roles",
     sortHighestRisk: "Highest risk",
@@ -1085,6 +1137,8 @@ export const en: Translations = {
     sortTemplateComplexity: "Template complexity",
     sortWarningCount: "Warning count",
     sortName: "Name",
+    sortSeverity: "Severity (highest first)",
+    sortHelper: "Reorders the full list; pagination updates after sorting.",
     pageSize: "Per page",
   },
   structure: {
@@ -1234,6 +1288,14 @@ export const en: Translations = {
     impactBandLocalMaintainability: "Local maintainability risk",
     impactBandCrossCutting: "Cross-cutting maintainability risk",
     impactBandBehaviorLeakRisk: "Behavior / leak risk",
+    ruleDetailRuleId: "Rule ID",
+    ruleDetailWhatItDetects: "What it detects",
+    ruleDetailNextStep: "Suggested next step",
+    ruleDetailMoreExamples: "Examples and technical detail",
+    ruleDetailLimited: "Details limited",
+    ruleDetailUnknownBody:
+      "This rule id is not in the Modulens rule catalog for this report. Counts below reflect what was recorded during the scan.",
+    relatedRulesShowInList: "Show in component list",
   },
   planner: {
     title: "Refactor Plan",
@@ -1436,6 +1498,24 @@ export const en: Translations = {
     anomalyGenericLabel: "Heuristic classification",
     anomalyGenericHelper:
       "Heuristic classification; review evidence before large refactors.",
+    searchMatchCount: "{count} matches with current filters",
+    activeFiltersRegion: "Active filters and sort",
+    chipRemove: "Remove {label}",
+    summaryPrimaryEmpty: "No components match the current search and filters.",
+    summaryPrimaryRange: "Showing {start}–{end} of {matching} matching · {listTotal} in this list",
+    summaryWorkspaceSegment: " · {workspaceTotal} in workspace",
+    summarySecondarySorted: "Sorted by {sortLabel}.",
+    summarySecondaryHealthyHidden: "{count} without a ranked primary issue hidden from this list.",
+    summarySecondarySearch: "Search applies together with the filters above.",
+    summarySecondaryNoDominantView: "View: components without a ranked primary issue.",
+    summarySecondarySeverityInView: "In current results: {critical} critical · {high} high.",
+    chipSearch: "Search: ",
+    chipIssue: "Issue: ",
+    chipSeverity: "Severity: ",
+    chipArea: "Area: ",
+    chipRule: "Rule: ",
+    chipProject: "Project: ",
+    chipSort: "Sort: ",
   },
 };
 

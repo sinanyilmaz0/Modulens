@@ -12,6 +12,7 @@ import {
 import { REPORT_STYLES } from "./styles";
 import { SIGNAL_DISPLAY_LABELS } from "./templates";
 import { buildHtmlClientComponentDetailsMap } from "./html-embedded-payload";
+import { buildComponentExplorerSearchText } from "./component-explorer-search-text";
 import {
   escapeHtml,
   renderDashboardCard,
@@ -83,6 +84,7 @@ import {
   formatAreaLabelForDisplay,
 } from "./feature-extraction";
 import { getRulesByCategory, RULES_REGISTRY, getRuleById } from "../../rules/rule-registry";
+import { getRuleTitleForDisplay } from "./rule-display-helpers";
 import {
   enrichRulesWithWorkspaceData,
   getTopActionableRules,
@@ -223,6 +225,12 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
       var PAGE_TITLE_KEYS = { overview: "overview.reportTitle", components: "nav.components", patterns: "nav.patterns", rules: "nav.rules", structure: "nav.structure", planner: "nav.refactorPlan" };
       var data = typeof window.__REPORT_DATA__ !== "undefined" ? window.__REPORT_DATA__ : {};
       var esc = function(s) { return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/[\\n\\r]+/g, " "); };
+
+      function resolveRuleTitle(id) {
+        if (!id) return "";
+        var m = (window.__RULES_BY_ID__ || {})[id];
+        return (m && m.title) ? m.title : id;
+      }
 
       function getNested(obj, path) {
         var parts = path.split(".");
@@ -479,7 +487,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
             e.preventDefault();
             var topRuleId = topActionableCard.getAttribute("data-rule-id");
             var topRuleTitle = topActionableCard.getAttribute("data-rule-title");
-            if (topRuleId && topRuleTitle) openDetail({ type: "rule", id: topRuleId, title: topRuleTitle, subtitle: "Rule" });
+            if (topRuleId) openDetail({ type: "rule", id: topRuleId, title: topRuleTitle || resolveRuleTitle(topRuleId), subtitle: "Rule" });
           } else {
             var ruleExpandBtn = e.target && e.target.closest ? e.target.closest(".rule-card-expand-btn") : null;
             var ruleHeader = e.target && e.target.closest ? e.target.closest(".rule-card-header") : null;
@@ -488,7 +496,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
               e.preventDefault();
               var ruleId = ruleCard.getAttribute("data-rule-id");
               var ruleTitle = ruleCard.getAttribute("data-rule-title");
-              if (ruleId && ruleTitle) openDetail({ type: "rule", id: ruleId, title: ruleTitle, subtitle: "Rule" });
+              if (ruleId) openDetail({ type: "rule", id: ruleId, title: ruleTitle || resolveRuleTitle(ruleId), subtitle: "Rule" });
             }
           }
         }
@@ -620,9 +628,17 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
       function applyComponentsExplorerFilters() {
         var listWrap = document.getElementById("components-explorer-list-wrap");
         var emptyEl = document.getElementById("components-explorer-empty");
-        var summaryStrip = document.querySelector(".components-summary-strip");
         if (!listWrap) return;
         var rows = Array.from(listWrap.querySelectorAll(".component-explorer-row"));
+        var problematicCount = rows.filter(function(r) {
+          var i = r.getAttribute("data-issue-type") || "";
+          var wc = parseInt(r.getAttribute("data-warning-count") || "0", 10) || 0;
+          var sev = r.getAttribute("data-severity") || "";
+          var elevated = sev === "WARNING" || sev === "HIGH" || sev === "CRITICAL";
+          if (elevated || wc > 0) return true;
+          return i !== "" && i !== "NO_DOMINANT_ISSUE";
+        }).length;
+        var healthyCount = rows.length - problematicCount;
         var issueType = issueSelect?.value || "all";
         var severity = severitySelect?.value || "all";
         var search = (searchInput?.value || "").trim().toLowerCase();
@@ -679,78 +695,124 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
         listWrap.style.display = totalVisible === 0 ? "none" : "";
         if (paginationEl) paginationEl.style.display = totalVisible === 0 ? "none" : "flex";
 
-        if (summaryStrip && rows.length > 0) {
-          var tComp = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
-          var tIssues = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.issues;
-          var tSev = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.severity;
-          var summaryFlagged = (tComp && tComp.summaryFlagged) || "Showing {showing} of {total} flagged components";
-          var summarySortedBy = (tComp && tComp.summarySortedBy) || "sorted by {sortLabel}";
-          var healthyHidden = (tComp && tComp.healthyHidden) || "— {count} healthy components hidden";
-          var filteringByLabel = (tComp && tComp.filteringBy) || "Filtering by";
-          var problematicCount = rows.filter(function(r) {
-            var i = r.getAttribute("data-issue-type") || "";
-            var wc = parseInt(r.getAttribute("data-warning-count") || "0", 10) || 0;
-            var sev = r.getAttribute("data-severity") || "";
-            var elevated = sev === "WARNING" || sev === "HIGH" || sev === "CRITICAL";
-            if (elevated || wc > 0) return true;
-            return i !== "" && i !== "NO_DOMINANT_ISSUE";
-          }).length;
-          var healthyCount = rows.length - problematicCount;
-          var showingStr = totalVisible > 0 ? String(startIdx + 1) + "-" + endIdx : "0";
-          var sortLabel = sortSelect && sortSelect.options[sortSelect.selectedIndex] ? sortSelect.options[sortSelect.selectedIndex].text : "highest risk";
-          var sortSuffix = " — " + summarySortedBy.replace("{sortLabel}", sortLabel);
-          var filterPrefix = "";
-          var filterParts = [];
-          if (issueType && issueType !== "all") filterParts.push((tIssues && tIssues[issueType]) || issueType);
-          if (severity && severity !== "all") filterParts.push((tSev && tSev[severity.toLowerCase()]) || severity);
-          if (search) filterParts.push('"' + (search.length > 15 ? search.substring(0, 15) + "…" : search) + '"');
-          if (structureFilter || ruleFilter || projectFilter) filterParts.push("custom filters");
-          if (filterParts.length > 0) filterPrefix = filteringByLabel + " " + filterParts.join(" and ") + ". ";
-          var mainText = "";
-          if (issueType === "NO_DOMINANT_ISSUE") {
-            var noPrimaryTpl = (tComp && tComp.showingWithoutRankedPrimary) || "Showing {showing} of {total} without a ranked primary issue";
-            mainText = noPrimaryTpl.replace("{showing}", showingStr).replace("{total}", String(totalVisible)) + sortSuffix;
-          } else if (showHealthy) {
-            var sevParts = [];
-            if (criticalCount > 0) sevParts.push(criticalCount + " critical");
-            if (highCount > 0) sevParts.push(highCount + " high");
-            mainText = "Showing " + showingStr + " of " + totalVisible + " components" + (sevParts.length ? " · " + sevParts.join(" · ") : "") + sortSuffix;
+        var searchMatchEl = document.getElementById("components-search-match-count");
+        var searchClearBtn = document.getElementById("components-search-clear");
+        var tCompMc = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
+        var matchTpl = (tCompMc && tCompMc.searchMatchCount) || "{count} matches";
+        if (searchMatchEl) {
+          if (search) {
+            searchMatchEl.textContent = matchTpl.replace("{count}", String(totalVisible));
+            searchMatchEl.style.display = "block";
           } else {
-            mainText = summaryFlagged.replace("{showing}", showingStr).replace("{total}", String(problematicCount)) + " " + healthyHidden.replace("{count}", String(healthyCount)) + sortSuffix;
+            searchMatchEl.textContent = "";
+            searchMatchEl.style.display = "none";
           }
-          summaryStrip.textContent = filterPrefix + mainText;
+        }
+        if (searchClearBtn) {
+          searchClearBtn.hidden = !search;
+        }
+        var emptyTitle = document.getElementById("components-explorer-empty-title");
+        var emptyHint = document.getElementById("components-explorer-empty-hint");
+        var tEmptyDyn = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.empty;
+        if (emptyTitle && emptyHint && tEmptyDyn && totalVisible === 0) {
+          if (search) {
+            if (tEmptyDyn.noMatchSearch) emptyTitle.textContent = tEmptyDyn.noMatchSearch;
+            var hasOtherFilters = (issueType && issueType !== "all") || (severity && severity !== "all") || !!structureFilter || !!ruleFilter || !!projectFilter || !showHealthy;
+            if (hasOtherFilters && tEmptyDyn.noMatchCombinedHint) emptyHint.textContent = tEmptyDyn.noMatchCombinedHint;
+            else if (tEmptyDyn.noMatchSearchHint) emptyHint.textContent = tEmptyDyn.noMatchSearchHint;
+          } else {
+            if (tEmptyDyn.noMatchFilters) emptyTitle.textContent = tEmptyDyn.noMatchFilters;
+            if (tEmptyDyn.noMatchFiltersHint) emptyHint.textContent = tEmptyDyn.noMatchFiltersHint;
+          }
+        }
+
+        var primEl = document.getElementById("components-summary-primary");
+        var secEl = document.getElementById("components-summary-secondary");
+        if (rows.length > 0 && (primEl || secEl)) {
+          var tCompSm = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
+          var sortLabelSm = sortSelect && sortSelect.options[sortSelect.selectedIndex] ? sortSelect.options[sortSelect.selectedIndex].text : "Highest risk";
+          var listTotal = rows.length;
+          var workspaceTotalRaw = listWrap.getAttribute("data-total-components");
+          var workspaceTotal = workspaceTotalRaw ? parseInt(workspaceTotalRaw, 10) : NaN;
+          if (isNaN(workspaceTotal)) workspaceTotal = null;
+          var showingStart = totalVisible > 0 ? startIdx + 1 : 0;
+          var showingEnd = totalVisible > 0 ? endIdx : 0;
+          var primaryEmpty = (tCompSm && tCompSm.summaryPrimaryEmpty) || "No components match the current search and filters.";
+          var primaryRange = (tCompSm && tCompSm.summaryPrimaryRange) || "Showing {start}–{end} of {matching} matching · {listTotal} in this list";
+          var workspaceSeg = (tCompSm && tCompSm.summaryWorkspaceSegment) || " · {workspaceTotal} in workspace";
+          var secondarySorted = (tCompSm && tCompSm.summarySecondarySorted) || "Sorted by {sortLabel}.";
+          var secondaryHealthyHidden = (tCompSm && tCompSm.summarySecondaryHealthyHidden) || "{count} without a ranked primary issue hidden from this list.";
+          var secondarySearch = (tCompSm && tCompSm.summarySecondarySearch) || "Search applies together with the filters above.";
+          var secondaryNoDominant = (tCompSm && tCompSm.summarySecondaryNoDominantView) || "View: components without a ranked primary issue.";
+          var secondarySevInView = (tCompSm && tCompSm.summarySecondarySeverityInView) || "In current results: {critical} critical · {high} high.";
+          var primary = totalVisible === 0 ? primaryEmpty : primaryRange.replace("{start}", String(showingStart)).replace("{end}", String(showingEnd)).replace("{matching}", String(totalVisible)).replace("{listTotal}", String(listTotal));
+          if (totalVisible > 0 && workspaceTotal != null && workspaceTotal !== listTotal) {
+            primary += workspaceSeg.replace("{workspaceTotal}", String(workspaceTotal));
+          }
+          var secParts = [secondarySorted.replace("{sortLabel}", sortLabelSm)];
+          if (issueType === "NO_DOMINANT_ISSUE") secParts.push(secondaryNoDominant);
+          if (!showHealthy && healthyCount > 0) secParts.push(secondaryHealthyHidden.replace("{count}", String(healthyCount)));
+          if (search) secParts.push(secondarySearch);
+          if (showHealthy && issueType !== "NO_DOMINANT_ISSUE" && (criticalCount > 0 || highCount > 0)) {
+            secParts.push(secondarySevInView.replace("{critical}", String(criticalCount)).replace("{high}", String(highCount)));
+          }
+          var secondary = secParts.join(" ");
+          if (primEl) primEl.textContent = primary;
+          if (secEl) secEl.textContent = secondary;
         }
 
         var activeFiltersEl = document.getElementById("components-active-filters");
         if (activeFiltersEl) {
           var chips = [];
-          var t = window.__TRANSLATIONS__;
-          var issues = t && t.issues;
-          var severityLabels = t && t.severity;
-          var clearAllLabel = (t && t.components && t.components.clearAllFilters) || (t && t.components && t.components.clearAll) || "Clear all filters";
-          var healthyHiddenLabel = (t && t.components && t.components.healthyHiddenChip) || "Healthy hidden";
-          var sortLabel = sortSelect && sortSelect.options[sortSelect.selectedIndex] ? sortSelect.options[sortSelect.selectedIndex].text : "Highest risk";
-          if (search) chips.push({ type: "search", label: "Search: " + (search.length > 15 ? search.substring(0, 15) + "…" : search) });
-          if (issueType && issueType !== "all") chips.push({ type: "issue", label: "Issue: " + ((issues && issues[issueType]) || issueType) });
-          if (severity && severity !== "all") chips.push({ type: "severity", label: "Severity: " + ((severityLabels && severityLabels[severity.toLowerCase()]) || severity) });
+          var tChip = window.__TRANSLATIONS__;
+          var issues = tChip && tChip.issues;
+          var severityLabels = tChip && tChip.severity;
+          var tCompChip = tChip && tChip.components;
+          var clearAllLabel = (tCompChip && tCompChip.clearAllFilters) || (tCompChip && tCompChip.clearAll) || "Clear all filters";
+          var healthyHiddenLabel = (tCompChip && tCompChip.healthyHiddenChip) || "Healthy hidden";
+          var chipSearchP = (tCompChip && tCompChip.chipSearch) || "Search: ";
+          var chipIssueP = (tCompChip && tCompChip.chipIssue) || "Issue: ";
+          var chipSeverityP = (tCompChip && tCompChip.chipSeverity) || "Severity: ";
+          var chipAreaP = (tCompChip && tCompChip.chipArea) || "Area: ";
+          var chipRuleP = (tCompChip && tCompChip.chipRule) || "Rule: ";
+          var chipProjectP = (tCompChip && tCompChip.chipProject) || "Project: ";
+          var chipSortP = (tCompChip && tCompChip.chipSort) || "Sort: ";
+          var removeChipTpl = (tCompChip && tCompChip.chipRemove) || "Remove {label}";
+          var sortLabelChip = sortSelect && sortSelect.options[sortSelect.selectedIndex] ? sortSelect.options[sortSelect.selectedIndex].text : "Highest risk";
+          if (search) {
+            var searchDisp = search.length > 40 ? search.substring(0, 40) + "…" : search;
+            chips.push({ type: "search", label: chipSearchP + searchDisp, fullLabel: chipSearchP + search });
+          }
+          if (issueType && issueType !== "all") {
+            var issueTxt = (issues && issues[issueType]) || issueType;
+            chips.push({ type: "issue", label: chipIssueP + issueTxt, fullLabel: chipIssueP + issueTxt });
+          }
+          if (severity && severity !== "all") {
+            var sevTxt = (severityLabels && severityLabels[severity.toLowerCase()]) || severity;
+            chips.push({ type: "severity", label: chipSeverityP + sevTxt, fullLabel: chipSeverityP + sevTxt });
+          }
           if (structureFilter) {
             var structByType = window.__STRUCTURE_BY_TYPE__ || {};
             var struct = structByType[structureFilter];
-            chips.push({ type: "structure", label: "Area: " + ((struct && struct.label) || structureFilter) });
+            var areaTxt = (struct && struct.label) || structureFilter;
+            chips.push({ type: "structure", label: chipAreaP + areaTxt, fullLabel: chipAreaP + areaTxt });
           }
           if (ruleFilter) {
             var rulesById = window.__RULES_BY_ID__ || {};
             var rule = rulesById[ruleFilter];
-            chips.push({ type: "rule", label: "Rule: " + ((rule && rule.title) || ruleFilter) });
+            var ruleTxt = (rule && rule.title) || ruleFilter;
+            chips.push({ type: "rule", label: chipRuleP + ruleTxt, fullLabel: chipRuleP + ruleTxt });
           }
-          if (projectFilter) chips.push({ type: "project", label: "Project: " + projectFilter });
-          if (!showHealthy && healthyCount > 0) chips.push({ type: "healthyHidden", label: healthyHiddenLabel });
-          if (sortSelect && sortSelect.value !== "highest-risk") chips.push({ type: "sort", label: "Sort: " + sortLabel });
+          if (projectFilter) chips.push({ type: "project", label: chipProjectP + projectFilter, fullLabel: chipProjectP + projectFilter });
+          if (!showHealthy && healthyCount > 0) chips.push({ type: "healthyHidden", label: healthyHiddenLabel, fullLabel: healthyHiddenLabel });
+          if (sortSelect && sortSelect.value !== "highest-risk") chips.push({ type: "sort", label: chipSortP + sortLabelChip, fullLabel: chipSortP + sortLabelChip });
           var html = "";
           chips.forEach(function(c) {
-            html += "<span class=\\"active-filter-chip\\" data-filter-type=\\"" + (c.type || "") + "\\"><span class=\\"active-filter-chip-label\\">" + esc(c.label || "") + "</span><button type=\\"button\\" class=\\"active-filter-chip-remove\\" aria-label=\\"Remove filter\\">×</button></span>";
+            var full = c.fullLabel || c.label || "";
+            var removeAria = removeChipTpl.replace("{label}", full);
+            html += "<span class=\\"active-filter-chip\\" data-filter-type=\\"" + (c.type || "") + "\\"><span class=\\"active-filter-chip-label\\" title=\\"" + esc(full) + "\\">" + esc(c.label || "") + "</span><button type=\\"button\\" class=\\"active-filter-chip-remove\\" aria-label=\\"" + esc(removeAria) + "\\">×</button></span>";
           });
-          if (chips.length > 0) html += "<button type=\\"button\\" class=\\"active-filter-clear-all\\">" + clearAllLabel + "</button>";
+          if (chips.length > 0) html += "<button type=\\"button\\" class=\\"active-filter-clear-all\\">" + esc(clearAllLabel) + "</button>";
           activeFiltersEl.innerHTML = html;
           activeFiltersEl.style.display = chips.length > 0 ? "flex" : "none";
           activeFiltersEl.querySelectorAll(".active-filter-chip-remove").forEach(function(btn) {
@@ -767,6 +829,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
               if (filterType === "healthyHidden" && showHealthyCheckbox) showHealthyCheckbox.checked = true;
               if (filterType === "sort" && sortSelect) sortSelect.value = "highest-risk";
               currentPage = 0;
+              if (filterType === "sort") applySort();
               applyComponentsExplorerFilters();
             });
           });
@@ -781,6 +844,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
             var projEl = document.getElementById("filter-project"); if (projEl) projEl.value = "";
             if (showHealthyCheckbox) showHealthyCheckbox.checked = false;
             currentPage = 0;
+            applySort();
             applyFilters();
           });
         }
@@ -821,12 +885,22 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
         var sortBy = sortSelect?.value || "highest-risk";
 
         function num(a, key) { return parseInt(a.getAttribute("data-" + key) || "0", 10); }
+        function severityRank(s) {
+          /* Keep in sync with explorerSeveritySortRank in component-explorer-ui-copy.ts */
+          var m = { CRITICAL: 4, HIGH: 3, WARNING: 2, LOW: 1 };
+          return m[s] != null ? m[s] : 0;
+        }
         rows.sort(function(a, b) {
           if (sortBy === "highest-risk") return num(b, "risk-score") - num(a, "risk-score");
           if (sortBy === "line-count") return num(b, "line-count") - num(a, "line-count");
           if (sortBy === "dependency-count") return num(b, "dependency-count") - num(a, "dependency-count");
           if (sortBy === "template-complexity") return num(b, "template-lines") - num(a, "template-lines");
           if (sortBy === "warning-count") return num(b, "warning-count") - num(a, "warning-count");
+          if (sortBy === "severity") {
+            var ra = severityRank(a.getAttribute("data-severity") || "");
+            var rb = severityRank(b.getAttribute("data-severity") || "");
+            if (rb !== ra) return rb - ra;
+          }
           var na = (a.getAttribute("data-name") || "").toLowerCase();
           var nb = (b.getAttribute("data-name") || "").toLowerCase();
           return na.localeCompare(nb);
@@ -868,11 +942,25 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
 
       if (issueSelect) issueSelect.addEventListener("change", function() { currentPage = 0; applyFilters(); });
       if (severitySelect) severitySelect.addEventListener("change", function() { currentPage = 0; applyFilters(); });
-      if (sortSelect) { sortSelect.addEventListener("change", applySort); }
+      if (sortSelect) {
+        sortSelect.addEventListener("change", function() {
+          applySort();
+          applyComponentsExplorerFilters();
+        });
+      }
       if (pageSizeSelect) pageSizeSelect.addEventListener("change", function() { currentPage = 0; applyComponentsExplorerFilters(); });
       if (searchInput) {
         var searchTimeout;
         searchInput.addEventListener("input", function() { currentPage = 0; clearTimeout(searchTimeout); searchTimeout = setTimeout(applyComponentsExplorerFilters, 150); });
+      }
+      var searchClearBtn = document.getElementById("components-search-clear");
+      if (searchClearBtn && searchInput) {
+        searchClearBtn.addEventListener("click", function() {
+          searchInput.value = "";
+          searchInput.focus();
+          currentPage = 0;
+          applyComponentsExplorerFilters();
+        });
       }
       if (paginationPrev) paginationPrev.addEventListener("click", function() { if (currentPage > 0) { currentPage--; applyComponentsExplorerFilters(); } });
       if (paginationNext) paginationNext.addEventListener("click", function() { currentPage++; applyComponentsExplorerFilters(); });
@@ -883,6 +971,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           if (issueSelect) issueSelect.value = "all";
           if (severitySelect) severitySelect.value = "all";
           if (searchInput) searchInput.value = "";
+          if (sortSelect) sortSelect.value = "highest-risk";
           var ruleFilterEl = document.getElementById("filter-rule-id");
           if (ruleFilterEl) ruleFilterEl.value = "";
           var structureFilterEl = document.getElementById("filter-structure-concern");
@@ -891,6 +980,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           if (projectFilterEl) projectFilterEl.value = "";
           if (showHealthyCheckbox) showHealthyCheckbox.checked = false;
           currentPage = 0;
+          applySort();
           applyFilters();
         });
       }
@@ -1072,9 +1162,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
         var viewInComponentsLabel = dt("drawer.viewInComponents") || "Back to components";
         var openInPlannerLabel = dt("drawer.openInRefactorPlan") || "Open in refactor plan";
         var filterBySmellLabel = dt("drawer.filterBySameSmell") || "Filter by same issue type";
-        var filterByProjectLabel = dt("drawer.filterBySameProject") || "Filter by same project";
         var copyPathLabel = dt("drawer.copyPath") || "Copy file path";
-        var project = entry.sourceRoot || "";
         if (hasMeaningfulRefactor(entry)) {
           actions.push({ id: "copyRefactor", html: "<button type=\\"button\\" class=\\"btn-primary structure-copy-refactor-btn\\" data-refactor=\\"" + esc(refactorText) + "\\" data-why=\\"" + esc(whyItMatters) + "\\">" + esc(copyRefactorLabel) + "</button>" });
         }
@@ -1082,9 +1170,6 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
         if (entry.dominantIssue) {
           actions.push({ id: "openInPatterns", html: "<a href=\\"#patterns\\" class=\\"btn-secondary planner-nav-link\\" data-nav=\\"patterns\\" data-pattern-key=\\"" + esc(entry.dominantIssue) + "\\">" + esc(openInPatternsLabel) + "</a>" });
           actions.push({ id: "filterBySmell", html: "<a href=\\"#components\\" class=\\"btn-secondary planner-nav-link\\" data-nav=\\"components\\" data-issue-type=\\"" + esc(entry.dominantIssue) + "\\">" + esc(filterBySmellLabel) + "</a>" });
-        }
-        if (project) {
-          actions.push({ id: "filterByProject", html: "<a href=\\"#components\\" class=\\"btn-secondary planner-nav-link\\" data-nav=\\"components\\" data-project=\\"" + esc(project) + "\\">" + esc(filterByProjectLabel) + "</a>" });
         }
         if (sourceContext !== "components") {
           actions.push({ id: "viewInComponents", html: "<a href=\\"#components\\" class=\\"btn-secondary planner-nav-link\\" data-nav=\\"components\\" data-search=\\"" + esc(compName) + "\\">" + esc(viewInComponentsLabel) + "</a>" });
@@ -1109,7 +1194,7 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           case "rule": {
             var rulesById = window.__RULES_BY_ID__ || {};
             var rule = rulesById[payload.id];
-            return rule ? renderRuleDetailContent(rule, payload.id) : "<p>Rule not found.</p>";
+            return renderRuleDetailContent(rule, payload.id);
           }
           case "structure": {
             var structureByType = window.__STRUCTURE_BY_TYPE__ || {};
@@ -1131,40 +1216,46 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
       }
       function renderRuleDetailContent(rule, ruleId) {
         var dt = getDrawerT;
-        var whyLabel = (dt("rules.whyItMatters") || "Why it matters");
-        var badLabel = (dt("rules.badExample") || "Bad example");
-        var goodLabel = (dt("rules.goodExample") || "Good example");
-        var refactorLabel = (dt("rules.refactorDirection") || "Refactor direction");
-        var suggestedActionLabel = (dt("rules.suggestedAction") || "Suggested action");
-        var workspaceImpactLabel = (dt("rules.workspaceImpact") || "Workspace impact");
-        var topAffectedLabel = (dt("rules.topAffectedComponents") || "Top affected components");
-        var viewTriggeredLabel = (dt("rules.viewTriggeredComponents") || "View triggered components");
-        var openAffectedLabel = (dt("rules.openAffectedComponents") || "Open affected components");
-        var commonFalsePositivesLabel = (dt("rules.commonFalsePositives") || "Common false positive patterns");
+        var labelRuleId = dt("rules.ruleDetailRuleId") || "Rule ID";
+        var labelDetects = dt("rules.ruleDetailWhatItDetects") || "What it detects";
+        var labelWhy = dt("rules.whyItMatters") || "Why it matters";
+        var labelNext = dt("rules.ruleDetailNextStep") || "Suggested next step";
+        var labelMore = dt("rules.ruleDetailMoreExamples") || "Examples and technical detail";
+        var badLabel = dt("rules.badExample") || "Bad example";
+        var goodLabel = dt("rules.goodExample") || "Good example";
+        var refactorLabel = dt("rules.refactorDirection") || "Refactor direction";
+        var suggestedActionLabel = dt("rules.suggestedAction") || "Suggested action";
+        var workspaceImpactLabel = dt("rules.workspaceImpact") || "Workspace impact";
+        var topAffectedLabel = dt("rules.topAffectedComponents") || "Top affected components";
+        var openAffectedLabel = dt("rules.openAffectedComponents") || "Open affected components";
+        var commonFalsePositivesLabel = dt("rules.commonFalsePositives") || "Common false positive patterns";
+        var limitedLabel = dt("rules.ruleDetailLimited") || "Details limited";
+        var unknownBody = dt("rules.ruleDetailUnknownBody") || "This rule id is not in the Modulens rule catalog for this report. Counts below reflect what was recorded during the scan.";
         var ruleToAffected = window.__RULE_TO_AFFECTED__ || {};
         var violationCounts = window.__RULE_VIOLATION_COUNTS__ || {};
         var count = violationCounts[ruleId] || 0;
         var affectedPaths = ruleToAffected[ruleId] || [];
         var affectedCount = affectedPaths.length;
         var topPaths = affectedPaths.slice(0, 8);
-        var html = "<div class=\\"drawer-section rule-drawer-standardized\\">";
-        html += "<p class=\\"rule-explanation\\">" + esc(rule.explanation) + "</p>";
-        html += "<h4 class=\\"rule-section-label\\">" + whyLabel + "</h4><p class=\\"rule-why\\">" + esc(rule.whyItMatters) + "</p>";
-        if (rule.impactCategory) {
-          var impactBandLabel = getImpactBandLabelForDrawer(rule.impactCategory);
-          html += "<p class=\\"rule-impact-band-drawer\\"><span class=\\"badge rule-impact-badge rule-impact-" + esc(rule.impactCategory) + "\\">" + esc(impactBandLabel) + "</span></p>";
+
+        function truncateDrawerText(text, max) {
+          if (!text || typeof text !== "string") return "";
+          var s = text.replace(/\\s+/g, " ").trim();
+          if (s.length <= max) return s;
+          var slice = s.slice(0, max);
+          var sp = slice.lastIndexOf(" ");
+          if (sp > max * 0.55) slice = slice.slice(0, sp);
+          return slice.trim() + "…";
         }
-        if (rule.suggestedAction) {
-          html += "<h4 class=\\"rule-section-label\\">" + suggestedActionLabel + "</h4><p class=\\"rule-suggested-action\\">" + esc(rule.suggestedAction) + "</p>";
+        function firstSeg(t, max) {
+          if (!t || typeof t !== "string") return "";
+          var s = t.replace(/\\s+/g, " ").trim();
+          var cut = s.split(/[.;]\\s+/)[0] || s;
+          return truncateDrawerText(cut.trim(), max);
         }
-        html += "<h4 class=\\"rule-section-label\\">" + badLabel + "</h4><pre class=\\"rule-example rule-bad rule-example-compact\\">" + esc(rule.badExample) + "</pre>";
-        html += "<h4 class=\\"rule-section-label\\">" + goodLabel + "</h4><pre class=\\"rule-example rule-good rule-example-compact\\">" + esc(rule.goodExample) + "</pre>";
-        if (rule.commonFalsePositives) {
-          html += "<h4 class=\\"rule-section-label\\">" + commonFalsePositivesLabel + "</h4><p class=\\"rule-common-false-positives\\">" + esc(rule.commonFalsePositives) + "</p>";
-        }
-        html += "<h4 class=\\"rule-section-label\\">" + refactorLabel + "</h4><p class=\\"rule-refactor\\">" + esc(rule.refactorDirection) + "</p>";
-        if (count > 0 || affectedCount > 0) {
-          html += "<h4 class=\\"rule-section-label\\">" + workspaceImpactLabel + "</h4>";
+        function appendWorkspaceImpact(html) {
+          if (count <= 0 && affectedCount <= 0) return html;
+          html += "<h4 class=\\"rule-section-label\\">" + esc(workspaceImpactLabel) + "</h4>";
           if (affectedCount === 1 && count === 1) {
             html += "<p class=\\"rule-workspace-impact\\">Triggered in 1 component.</p>";
           } else if (affectedCount === 1 && count > 1) {
@@ -1172,10 +1263,10 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           } else {
             html += "<p class=\\"rule-workspace-impact\\">Triggered in " + affectedCount + " components (" + count + " times across workspace).</p>";
           }
-          html += "<p class=\\"rule-workspace-impact-label\\">" + topAffectedLabel + ":</p>";
+          html += "<p class=\\"rule-workspace-impact-label\\">" + esc(topAffectedLabel) + ":</p>";
           html += "<ul class=\\"rule-affected-paths\\">";
-          for (var i = 0; i < topPaths.length; i++) {
-            var p = topPaths[i];
+          for (var wi = 0; wi < topPaths.length; wi++) {
+            var p = topPaths[wi];
             var short = p.indexOf("src/") >= 0 ? p.substring(p.indexOf("src/")) : p;
             if (short.length > 60) short = "..." + short.slice(-57);
             html += "<li><code>" + esc(short) + "</code></li>";
@@ -1185,7 +1276,42 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           html += "<div class=\\"rule-investigation-actions\\">";
           html += "<a href=\\"#components\\" class=\\"rule-action-link rule-action-open-affected btn-primary planner-nav-link\\" data-nav=\\"components\\" data-rule-id=\\"" + esc(ruleId) + "\\">" + esc(openAffectedLabel) + "</a>";
           html += "</div>";
+          return html;
         }
+
+        var html = "<div class=\\"drawer-section rule-drawer-standardized rule-drawer-detail\\">";
+        html += "<p class=\\"rule-detail-id-line\\"><span class=\\"rule-detail-meta-label\\">" + esc(labelRuleId) + ":</span> <code class=\\"rule-detail-id-code\\">" + esc(ruleId) + "</code></p>";
+
+        if (!rule) {
+          html += "<p class=\\"rule-detail-limited-badge text-muted\\">" + esc(limitedLabel) + "</p>";
+          html += "<p class=\\"rule-explanation\\">" + esc(unknownBody) + "</p>";
+          html = appendWorkspaceImpact(html);
+          html += "</div>";
+          return html;
+        }
+
+        html += "<h4 class=\\"rule-section-label\\">" + esc(labelDetects) + "</h4><p class=\\"rule-explanation\\">" + esc(truncateDrawerText(rule.explanation, 340)) + "</p>";
+        html += "<h4 class=\\"rule-section-label\\">" + esc(labelWhy) + "</h4><p class=\\"rule-why\\">" + esc(truncateDrawerText(rule.whyItMatters, 360)) + "</p>";
+        var nextText = rule.suggestedAction ? rule.suggestedAction : firstSeg(rule.refactorDirection, 220);
+        if (nextText) {
+          html += "<h4 class=\\"rule-section-label\\">" + esc(labelNext) + "</h4><p class=\\"rule-suggested-action\\">" + esc(nextText) + "</p>";
+        }
+        if (rule.impactCategory) {
+          var impactBandLabel = getImpactBandLabelForDrawer(rule.impactCategory);
+          html += "<p class=\\"rule-impact-band-drawer\\"><span class=\\"badge rule-impact-badge rule-impact-" + esc(rule.impactCategory) + "\\">" + esc(impactBandLabel) + "</span></p>";
+        }
+        var detailsInner = "";
+        detailsInner += "<h4 class=\\"rule-section-label\\">" + esc(badLabel) + "</h4><pre class=\\"rule-example rule-bad rule-example-compact\\">" + esc(rule.badExample) + "</pre>";
+        detailsInner += "<h4 class=\\"rule-section-label\\">" + esc(goodLabel) + "</h4><pre class=\\"rule-example rule-good rule-example-compact\\">" + esc(rule.goodExample) + "</pre>";
+        if (rule.commonFalsePositives) {
+          detailsInner += "<h4 class=\\"rule-section-label\\">" + esc(commonFalsePositivesLabel) + "</h4><p class=\\"rule-common-false-positives\\">" + esc(rule.commonFalsePositives) + "</p>";
+        }
+        detailsInner += "<h4 class=\\"rule-section-label\\">" + esc(refactorLabel) + "</h4><p class=\\"rule-refactor\\">" + esc(rule.refactorDirection) + "</p>";
+        if (rule.suggestedAction) {
+          detailsInner += "<h4 class=\\"rule-section-label\\">" + esc(suggestedActionLabel) + "</h4><p class=\\"rule-suggested-action\\">" + esc(rule.suggestedAction) + "</p>";
+        }
+        html += "<details class=\\"rule-detail-more\\"><summary class=\\"rule-detail-more-summary\\">" + esc(labelMore) + "</summary><div class=\\"rule-detail-more-body\\">" + detailsInner + "</div></details>";
+        html = appendWorkspaceImpact(html);
         html += "</div>";
         return html;
       }
@@ -1524,13 +1650,13 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
       function renderRelatedRules(entry, dt, esc) {
         var ruleIds = entry.triggeredRuleIds || [];
         if (ruleIds.length === 0) return "";
-        var rulesById = window.__RULES_BY_ID__ || {};
         var ruleToAffected = window.__RULE_TO_AFFECTED__ || {};
+        var filterListLabel = dt("rules.relatedRulesShowInList") || "Show in component list";
         var items = ruleIds.slice(0, 5).map(function(id) {
-          var rule = rulesById[id];
-          var title = rule ? rule.title : id;
+          var title = resolveRuleTitle(id);
           var count = (ruleToAffected[id] || []).length;
-          return "<li><a href=\\"#components\\" class=\\"planner-nav-link\\" data-nav=\\"components\\" data-rule-id=\\"" + esc(id) + "\\">" + esc(title) + (count > 0 ? " (" + count + " affected)" : "") + "</a></li>";
+          var meta = count > 0 ? "<span class=\\"drawer-related-rule-meta\\">(" + count + ")</span>" : "";
+          return "<li class=\\"drawer-related-rule-item\\"><div class=\\"drawer-related-rule-row\\"><button type=\\"button\\" class=\\"rule-drawer-detail-trigger drawer-related-rule-title-btn\\" data-rule-id=\\"" + esc(id) + "\\">" + esc(title) + "</button>" + meta + "</div><a href=\\"#components\\" class=\\"planner-nav-link drawer-related-rule-filter-link\\" data-nav=\\"components\\" data-rule-id=\\"" + esc(id) + "\\">" + esc(filterListLabel) + "</a></li>";
         }).join("");
         return "<div class=\\"drawer-section drawer-related-rules\\"><h4 class=\\"drawer-section-title\\">" + (dt("drawer.relatedRules") || "Related rules") + "</h4><ul class=\\"drawer-related-rules-list\\">" + items + "</ul></div>";
       }
@@ -1719,11 +1845,10 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
           var key = patternEl.getAttribute("data-pattern-key");
           if (key) { e.preventDefault(); e.stopPropagation(); var patternData = window.__PATTERN_DATA__; var pattern = patternData && patternData.patterns && patternData.patterns[key]; var patternSubtitle = "Pattern"; if (pattern && pattern.meta) { var m = pattern.meta; var parts = [(m.impactLevel || "").charAt(0).toUpperCase() + (m.impactLevel || "").slice(1) + " impact", m.count ? m.count + " components" : ""].filter(Boolean); if (m.topArea) parts.push("Most in " + m.topArea); patternSubtitle = parts.join(" · ") || "Pattern"; } pushDetail({ type: "pattern", id: key, title: pattern ? pattern.name : key, subtitle: patternSubtitle }); }
         }
-        var ruleEl = e.target && e.target.closest ? e.target.closest("[data-rule-id]") : null;
-        if (ruleEl) {
-          var ruleId = ruleEl.getAttribute("data-rule-id");
-          var ruleTitle = ruleEl.getAttribute("data-rule-title");
-          if (ruleId && ruleTitle) { e.preventDefault(); e.stopPropagation(); pushDetail({ type: "rule", id: ruleId, title: ruleTitle, subtitle: "Rule" }); }
+        var ruleTrig = e.target && e.target.closest ? e.target.closest(".rule-drawer-detail-trigger") : null;
+        if (ruleTrig) {
+          var rid = ruleTrig.getAttribute("data-rule-id");
+          if (rid) { e.preventDefault(); e.stopPropagation(); pushDetail({ type: "rule", id: rid, title: resolveRuleTitle(rid), subtitle: "Rule" }); }
         }
         var concernEl = e.target && e.target.closest ? e.target.closest("[data-concern-type]") : null;
         if (concernEl) {
@@ -2109,15 +2234,21 @@ function renderComponentsPage(
   const pageTitle = (t.components as Record<string, string>).title ?? "Components";
   const pageHelper = (t.components as Record<string, string>).filterHelper;
   const filtersLabel = (t.filters as Record<string, string>).sortBy ?? "Sort by";
-  const searchPlaceholder = (t.filters as Record<string, string>).searchPlaceholder ?? "Search component, class, path...";
+  const tf = t.filters as Record<string, string | undefined>;
+  const searchPlaceholder = tf.searchPlaceholder ?? "Search components…";
+  const searchAriaLabel = tf.searchAriaLabel ?? searchPlaceholder;
+  const searchHelper = tf.searchHelper ?? "";
+  const clearSearchLabel = (t.actions as Record<string, string | undefined>).clearSearch ?? "Clear search";
   const sortOptions = [
     { value: "highest-risk", label: (t.filters as Record<string, string>).sortHighestRisk ?? "Highest risk" },
     { value: "line-count", label: (t.filters as Record<string, string>).sortLineCount ?? "Line count" },
     { value: "dependency-count", label: (t.filters as Record<string, string>).sortDependencyCount ?? "Dependency count" },
     { value: "template-complexity", label: (t.filters as Record<string, string>).sortTemplateComplexity ?? "Template complexity" },
     { value: "warning-count", label: (t.filters as Record<string, string>).sortWarningCount ?? "Warning count" },
+    { value: "severity", label: (t.filters as Record<string, string>).sortSeverity ?? "Severity (highest first)" },
     { value: "name", label: (t.filters as Record<string, string>).sortName ?? "Name" },
   ];
+  const sortHelper = tf.sortHelper ?? "";
   const showHealthyLabel = (t.components as Record<string, string>).showHealthyComponents ?? "Show healthy components";
   const pageSizeLabel = (t.filters as Record<string, string>).pageSize ?? "Per page";
   const filtersHtml = `
@@ -2130,15 +2261,23 @@ function renderComponentsPage(
       <input type="hidden" id="filter-structure-concern" value="" />
       <input type="hidden" id="filter-project" value="" />
       <div class="components-explorer-filters-primary">
-        <div class="components-search-wrap">
-          <input type="search" id="components-search" class="components-search-input" placeholder="${escapeHtml(searchPlaceholder)}" aria-label="${escapeHtml(searchPlaceholder)}" />
+        <div class="components-search-row">
+          <div class="components-search-wrap">
+            <input type="search" id="components-search" class="components-search-input" placeholder="${escapeHtml(searchPlaceholder)}" aria-label="${escapeHtml(searchAriaLabel)}"${searchHelper ? ` aria-describedby="components-search-desc"` : ""} autocomplete="off" />
+            <button type="button" id="components-search-clear" class="components-search-clear" hidden aria-label="${escapeHtml(clearSearchLabel)}">${escapeHtml(clearSearchLabel)}</button>
+          </div>
+          ${searchHelper ? `<p id="components-search-desc" class="components-search-helper text-muted">${escapeHtml(searchHelper)}</p>` : ""}
+          <p id="components-search-match-count" class="components-search-match-count text-muted" role="status" aria-live="polite"></p>
         </div>
         <div class="components-explorer-filters-row">
-          <label>${escapeHtml(filtersLabel)}:
-            <select id="components-sort">
-              ${sortOptions.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("")}
-            </select>
-          </label>
+          <div class="components-sort-wrap">
+            <label class="components-sort-label">${escapeHtml(filtersLabel)}:
+              <select id="components-sort" aria-describedby="components-sort-desc">
+                ${sortOptions.map((o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("")}
+              </select>
+            </label>
+            <p id="components-sort-desc" class="components-sort-helper text-muted">${escapeHtml(sortHelper)}</p>
+          </div>
           <label>${escapeHtml(pageSizeLabel)}:
             <select id="components-page-size">
               <option value="25" selected>25</option>
@@ -2264,9 +2403,31 @@ function renderComponentsPage(
       item.dominantIssue && item.dominantIssue !== "NO_DOMINANT_ISSUE" && item.dominantIssue !== "__NO_DOMINANT_ISSUE__"
         ? item.dominantIssue
         : undefined;
+    const displayName = item.className || item.fileName.replace(/\.component\.ts$/, "");
+    const mainIssueFormatted = formatIssue(item.dominantIssue ?? null);
+    const ruleTitles = (item.triggeredRuleIds ?? [])
+      .map((id) => getRuleTitleForDisplay(id))
+      .filter((x) => x.length > 0);
+    const explorerSearchText = buildComponentExplorerSearchText({
+      displayName,
+      className: item.className,
+      filePath: item.filePath,
+      mainIssueFormatted,
+      diagnosticLabel: entry?.diagnosticLabel,
+      patternKey: patternKey ?? null,
+      familyName: familyInfo?.familyName ?? null,
+      project: item.project,
+      componentRole: item.componentRole,
+      inferredFeatureArea: item.inferredFeatureArea,
+      sourceRoot: item.sourceRoot,
+      triggeredRuleIds: item.triggeredRuleIds,
+      ruleTitles,
+      summaryLine,
+      actionSuggestion,
+    });
     return {
       ...item,
-      mainIssueFormatted: formatIssue(item.dominantIssue ?? null),
+      mainIssueFormatted,
       summaryLine,
       actionSuggestion,
       patternKey: patternKey ?? null,
@@ -2275,6 +2436,7 @@ function renderComponentsPage(
       propertyCount: entry?.propertyCount,
       subscriptionCount: item.subscriptionCount ?? entry?.lifecycle?.subscribeCount,
       serviceOrchestrationCount: item.serviceOrchestrationCount ?? entry?.responsibility?.serviceOrchestrationCount,
+      explorerSearchText,
     };
   });
 
@@ -2295,11 +2457,16 @@ function renderComponentsPage(
   );
 
   const listHtml = renderComponentExplorerList(rowInputs, formatIssue, t);
+  const emptyDetail =
+    (t.empty as Record<string, string | undefined>).noMatchFiltersDetail ??
+    "Active filters appear as chips below the toolbar. Remove chips or use Clear all filters.";
+  const activeFiltersRegion =
+    (t.components as Record<string, string | undefined>).activeFiltersRegion ?? "Active filters and sort";
   const emptyStateHtml = `
     <div class="components-explorer-empty components-empty-state-filtered" id="components-explorer-empty" style="display:none">
-      <p class="components-explorer-empty-title">${escapeHtml((t.empty as Record<string, string>).noMatchFilters ?? "No components match the current filters.")}</p>
-      <p class="components-explorer-empty-hint">${escapeHtml((t.empty as Record<string, string>).noMatchFiltersHint ?? "Try adjusting filters or clearing them to see more results.")}</p>
-      <p class="components-explorer-empty-detail">${escapeHtml((t.empty as Record<string, string>).noMatchFiltersDetail ?? "Active filters are shown as chips above. Clear individual chips or use the button below to reset all filters.")}</p>
+      <p class="components-explorer-empty-title" id="components-explorer-empty-title">${escapeHtml((t.empty as Record<string, string>).noMatchFilters ?? "No components match the current filters.")}</p>
+      <p class="components-explorer-empty-hint" id="components-explorer-empty-hint">${escapeHtml((t.empty as Record<string, string>).noMatchFiltersHint ?? "Try adjusting filters or clearing them to see more results.")}</p>
+      <p class="components-explorer-empty-detail">${escapeHtml(emptyDetail)}</p>
       <p class="components-explorer-empty-actions">
         <button type="button" id="components-reset-filters" class="btn-primary">${escapeHtml((t.components as Record<string, string>).clearAllFilters ?? (t.actions as Record<string, string>).resetFilters ?? "Clear all filters")}</button>
       </p>
@@ -2311,7 +2478,7 @@ function renderComponentsPage(
       <button type="button" class="pagination-btn" id="pagination-next" aria-label="Next page">Next ›</button>
     </div>`;
 
-  const activeFiltersHtml = `<div class="components-active-filters" id="components-active-filters"></div>`;
+  const activeFiltersHtml = `<div class="components-active-filters" id="components-active-filters" role="region" aria-label="${escapeHtml(activeFiltersRegion)}"></div>`;
   const helperHtml = componentsSummaryHelper ? `<p class="section-helper text-muted">${escapeHtml(componentsSummaryHelper)}</p>` : "";
   return filtersHtml + activeFiltersHtml + helperHtml + summaryStrip + `<div class="components-explorer-list-wrap" id="components-explorer-list-wrap" data-total-components="${totalComponents}">${listHtml}</div>` + paginationHtml + emptyStateHtml;
 }
