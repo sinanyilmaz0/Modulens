@@ -33,45 +33,42 @@ import { getBreakdownNouns, formatWorstBucketFinding } from "./breakdown-labels"
 import { ensureNoUnresolvedTokens, formatTemplate } from "./format-template";
 import { normalizeTextList } from "./section-normalization";
 import { formatDiagnosisCopy, buildWorkspaceDiagnosisFromLegacy, type WorkspaceDiagnosis } from "../../diagnostic/workspace-diagnosis";
+import { SIGNAL_DISPLAY_LABELS } from "./templates/signal-display-labels";
+import {
+  escapeHtml,
+  renderInfoTooltip,
+  renderSectionHeader,
+  renderBadge,
+  renderSmellBadge,
+  renderChip,
+  renderChipList,
+  renderTable,
+  raw,
+  renderEmptyState,
+  type TableCell,
+} from "./templates/primitives";
 
-/** User-friendly display labels for heuristic signal IDs (replaces raw technical names) */
-export const SIGNAL_DISPLAY_LABELS: Record<string, string> = {
-  "file-name-pattern": "Inferred from naming",
-  "router-outlet": "Template contains router outlet",
-  "form-group-ngform": "Form structure detected",
-  "video-audio-element": "Media elements present",
-  "ngfor-list": "List-like template structure",
-  "activated-route": "Uses route parameters",
-  "form-builder": "Form builder usage",
-  "media-player-service": "Media/player service usage",
-  "many-dependencies": "High dependency usage",
-  "router-usage": "Route-driven behavior detected",
-  "form-group-count": "Multiple form groups",
-  "service-orchestration": "High service orchestration",
-  "ui-state-fields": "Multiple UI state fields",
-  "orchestration-heavy": "Orchestration-heavy diagnostic",
-  "template-heavy-ngfor": "Template-heavy with list",
-  "mat-dialog-modal": "Dialog/modal usage",
-  "modal-drawer-usage": "Modal or drawer usage",
-  "heuristic_count_3+": "Multiple decomposition heuristics",
-  "heuristic_count_2": "Two decomposition heuristics",
-  "heuristic_count_1": "One decomposition heuristic",
-  "dominant_issue_match": "Dominant issue aligns with target",
-  "role_heuristic_match": "Role aligns with heuristic type",
-  "line_count_1000+": "Component exceeds 1000 lines",
-  "source_suffix": "Shared name suffix",
-  "source_directory": "Shared directory",
-  "source_prefix": "Shared name prefix",
-  "source_role": "Shared component role",
-  "common_signals_1": "1+ common signals",
-  "common_signals_2": "2+ common signals",
-  "common_signals_3": "3+ common signals",
-  "common_signals_4": "4+ common signals",
-  "common_signals_5": "5+ common signals",
-  "dominant_issues_2+": "2+ shared dominant issues",
-  "dominant_issues_1": "1 shared dominant issue",
-  "line_count_consistency": "Similar line counts",
-};
+export { SIGNAL_DISPLAY_LABELS };
+export {
+  escapeHtml,
+  renderInfoTooltip,
+  renderSectionHeader,
+  renderChip,
+  renderChipList,
+  TableCell,
+  raw,
+  renderTable,
+  renderBadge,
+  renderSmellBadge,
+  renderWarningCard,
+  renderEmptyState,
+} from "./templates/primitives";
+export {
+  renderSidebar,
+  renderTopBar,
+  renderSection,
+  renderDetailModalShell,
+} from "./templates/layout-shell";
 
 function getSignalDisplayLabel(signal: string, note: string): string {
   return SIGNAL_DISPLAY_LABELS[signal] ?? note ?? (signal || "").replace(/-/g, " ").replace(/_/g, " ");
@@ -101,85 +98,6 @@ function renderConfidenceBadge(
     }
   }
   return html;
-}
-
-export function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-const ICON_INFO = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="6"/><path d="M7 6v4M7 4v1"/></svg>`;
-
-export function renderInfoTooltip(explanation: string): string {
-  const safe = escapeHtml(explanation);
-  return `<span class="info-tooltip" title="${safe}" aria-label="${safe}">${ICON_INFO}</span>`;
-}
-
-/** Reusable section header: title + optional helper + optional tooltip in title */
-export function renderSectionHeader(
-  title: string,
-  options?: { helper?: string; titleHtml?: string }
-): string {
-  const titleEl = options?.titleHtml ?? escapeHtml(title);
-  const helperHtml = options?.helper ? `<p class="section-helper text-muted">${escapeHtml(options.helper)}</p>` : "";
-  return `<h2 class="page-section-title section-title-caps">${titleEl}</h2>${helperHtml}`;
-}
-
-const ICON_OVERVIEW = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>`;
-const ICON_COMPONENTS = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12M2 8h12M2 12h8"/></svg>`;
-const ICON_PATTERNS = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="4" height="4"/><rect x="10" y="2" width="4" height="4"/><rect x="2" y="10" width="4" height="4"/><rect x="10" y="10" width="4" height="4"/><path d="M6 4h4M6 12h4M4 6v4M12 6v4"/></svg>`;
-const ICON_PLANNER = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4h12v9H2z"/><path d="M2 6h12M5 2v4M11 2v4"/></svg>`;
-const ICON_RULES = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12v10H2z"/><path d="M5 6h6M5 8h6M5 10h4"/></svg>`;
-const ICON_STRUCTURE = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h4v4H2z"/><path d="M10 3h4v4h-4z"/><path d="M2 9h4v4H2z"/><path d="M10 9h4v4h-4z"/><path d="M6 2v2M6 12v2M6 6v4M2 6h2M12 6h2M2 10h2M12 10h2"/></svg>`;
-
-export function renderSidebar(t: Translations): string {
-  const navGroupLabel = t.nav.groupAnalysis ?? "Analysis";
-  const refGroupLabel = t.nav.groupReference ?? "Reference";
-  return `
-    <aside class="sidebar">
-      <div class="sidebar-brand">
-        <span class="sidebar-brand-title">Modulens</span>
-        <span class="sidebar-brand-subtitle">Architecture Intelligence</span>
-      </div>
-      <nav class="sidebar-nav">
-        <div class="sidebar-nav-group">
-          <span class="sidebar-nav-group-label">${escapeHtml(navGroupLabel)}</span>
-          <a href="#overview" data-page="overview" class="nav-link"><span class="nav-icon">${ICON_OVERVIEW}</span><span class="nav-label" data-i18n="nav.overview">${escapeHtml(t.nav.overview)}</span></a>
-          <a href="#components" data-page="components" class="nav-link"><span class="nav-icon">${ICON_COMPONENTS}</span><span class="nav-label" data-i18n="nav.components">${escapeHtml(t.nav.components)}</span></a>
-          <a href="#patterns" data-page="patterns" class="nav-link"><span class="nav-icon">${ICON_PATTERNS}</span><span class="nav-label" data-i18n="nav.patterns">${escapeHtml(t.nav.patterns)}</span></a>
-          <a href="#structure" data-page="structure" class="nav-link"><span class="nav-icon">${ICON_STRUCTURE}</span><span class="nav-label" data-i18n="nav.structure">${escapeHtml(t.nav.structure)}</span></a>
-          <a href="#planner" data-page="planner" class="nav-link"><span class="nav-icon">${ICON_PLANNER}</span><span class="nav-label" data-i18n="nav.refactorPlan">${escapeHtml(t.nav.refactorPlan)}</span></a>
-        </div>
-        <div class="sidebar-nav-group sidebar-nav-group-reference">
-          <span class="sidebar-nav-group-label">${escapeHtml(refGroupLabel)}</span>
-          <a href="#rules" data-page="rules" class="nav-link nav-link-reference"><span class="nav-icon">${ICON_RULES}</span><span class="nav-label" data-i18n="nav.rules">${escapeHtml(t.nav.rules)}</span></a>
-        </div>
-      </nav>
-    </aside>`;
-}
-
-export function renderTopBar(
-  t: Translations,
-  workspacePath: string,
-  generatedDate: string,
-  riskLevel: string,
-  riskBadgeClass: string
-): string {
-  return `
-    <div class="top-bar">
-      <div class="top-bar-left">
-        <h1 class="page-title" id="page-title">${escapeHtml(t.overview.reportTitle)}</h1>
-        <span class="workspace-meta">${escapeHtml(workspacePath)}</span>
-        <span class="workspace-meta">${escapeHtml(generatedDate)}</span>
-        <span class="risk-badge ${riskBadgeClass}">${escapeHtml(riskLevel)} Risk</span>
-      </div>
-      <div class="top-actions">
-        <button type="button" class="export-btn" id="export-report-btn" data-i18n="actions.exportReport">${escapeHtml(t.actions.exportReport)}</button>
-      </div>
-    </div>`;
 }
 
 export function renderWorkspaceHealthHero(
@@ -1365,61 +1283,6 @@ export function renderDiagnosticSummaryBarItem(
     </div>`;
 }
 
-export function renderChip(text: string): string {
-  return `<span class="chip">${escapeHtml(text)}</span>`;
-}
-
-export function renderChipList(texts: string[]): string {
-  if (texts.length === 0) return "—";
-  return `<span class="chip-list">${texts.map((t) => renderChip(t)).join("")}</span>`;
-}
-
-export type TableCell = string | { __raw: string };
-
-export function raw(html: string): { __raw: string } {
-  return { __raw: html };
-}
-
-function renderCell(cell: TableCell): string {
-  if (typeof cell === "object" && cell && "__raw" in cell) {
-    return (cell as { __raw: string }).__raw;
-  }
-  return escapeHtml(String(cell));
-}
-
-export function renderTable(
-  headers: string[],
-  rows: TableCell[][],
-  rowAttrs?: (rowIndex: number) => string,
-  columnClasses?: string[]
-): string {
-  const th = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
-  const trs = rows.map(
-    (row, i) =>
-      `<tr ${rowAttrs ? rowAttrs(i) : ""}>${row
-        .map(
-          (cell, j) =>
-            `<td${columnClasses?.[j] ? ` class="${escapeHtml(columnClasses[j])}"` : ""}>${renderCell(cell)}</td>`
-        )
-        .join("")}</tr>`
-  );
-  return `
-    <div class="table-wrap">
-      <table>
-        <thead><tr>${th}</tr></thead>
-        <tbody>${trs.join("")}</tbody>
-      </table>
-    </div>`;
-}
-
-export function renderBadge(text: string, severity: "critical" | "high" | "warning" | "low" | "info"): string {
-  return `<span class="badge ${severity}">${escapeHtml(text)}</span>`;
-}
-
-export function renderSmellBadge(text: string): string {
-  return `<span class="badge badge-smell">${escapeHtml(text)}</span>`;
-}
-
 export interface ComponentExplorerRowInput {
   filePath: string;
   fileName: string;
@@ -1658,29 +1521,6 @@ export function renderComponentsSummaryStrip(
     <div class="components-summary-primary" id="components-summary-primary">${escapeHtml(primary)}</div>
     <div class="components-summary-secondary" id="components-summary-secondary">${escapeHtml(secondary)}</div>
   </div>`;
-}
-
-export function renderSection(
-  id: string,
-  title: string,
-  content: string,
-  collapsible = false,
-  description?: string,
-  isPlannerSection = false
-): string {
-  const collClass = collapsible ? " collapsible" : "";
-  const titleClass = isPlannerSection ? "section-title section-title-planner" : "section-title";
-  const descHtml = description
-    ? isPlannerSection
-      ? `<p class="section-subtitle">${escapeHtml(description)}</p>`
-      : `<p class="section-description">${escapeHtml(description)}</p>`
-    : "";
-  return `
-    <section id="${escapeHtml(id)}" class="section${collClass}" data-section="${escapeHtml(id)}">
-      <h2 class="${titleClass}">${escapeHtml(title)}</h2>
-      ${descHtml}
-      <div class="section-content">${content}</div>
-    </section>`;
 }
 
 export function renderCard(
@@ -2537,19 +2377,6 @@ export function renderFeaturePatternCard(
         </div>
       </div>
     </div>`;
-}
-
-export function renderWarningCard(code: string, count: number): string {
-  return `
-    <div class="warning-card">
-      <div class="code">${escapeHtml(code)}</div>
-      <div class="count">${count} occurrences</div>
-    </div>`;
-}
-
-export function renderEmptyState(message: string, contextual = false): string {
-  const cls = contextual ? "empty-state empty-state-contextual" : "empty-state";
-  return `<div class="${cls}">${escapeHtml(message)}</div>`;
 }
 
 export function renderPatternEmptyState(input: {
@@ -4241,24 +4068,6 @@ export function renderStructureConcernCard(
           <a href="#components" class="btn-secondary structure-btn-inspect planner-nav-link" data-nav="components" data-structure-concern="${escapeHtml(concern.concernType)}" aria-label="${escapeHtml(inspectFilesLabel)}" title="${escapeHtml(inspectFilesTooltip)}">${escapeHtml(inspectFilesLabel)}</a>
           <a href="#planner" class="btn-secondary planner-nav-link" data-nav="planner" data-planner-section="extraction-opportunities" data-structure-concern="${escapeHtml(concern.concernType)}">${escapeHtml(openPlanLabel)}</a>
         </div>
-      </div>
-    </div>`;
-}
-
-export function renderDetailModalShell(t: { drawer?: { back?: string } }): string {
-  const backLabel = t?.drawer?.back ?? "Back";
-  return `
-    <div id="detail-modal-overlay" class="detail-modal-overlay" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
-      <div class="detail-modal" role="document">
-        <div class="detail-modal-header">
-          <button type="button" class="detail-modal-back" id="detail-modal-back" aria-label="${escapeHtml(backLabel)}" style="display:none">← ${escapeHtml(backLabel)}</button>
-          <div class="detail-modal-title-wrap">
-            <h2 id="detail-modal-title" class="detail-modal-title">Detail</h2>
-            <span id="detail-modal-subtitle" class="detail-modal-subtitle"></span>
-          </div>
-          <button type="button" class="detail-modal-close" id="detail-modal-close" aria-label="Close">×</button>
-        </div>
-        <div class="detail-modal-body" id="detail-modal-body"></div>
       </div>
     </div>`;
 }
