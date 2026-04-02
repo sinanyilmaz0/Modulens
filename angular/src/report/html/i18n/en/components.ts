@@ -83,7 +83,7 @@ export const enComponents: Pick<Translations, "components"> = {
     compareAddedRules: "Added rules",
     compareRemovedRules: "Removed rules",
     explorerBaselineActive: "Comparing against snapshot: {date}",
-    explorerBaselineActiveMulti: "{count} baselines selected — use project cards to change or clear.",
+    explorerBaselineActiveMulti: "{count} baselines selected — change or clear on the Components page.",
     explorerBaselineClearAll: "Clear compare",
     explorerBaselineComparingProject: "Comparing project: {project}",
     explorerBaselineSnapshotLabel: "Baseline snapshot: {date}",
@@ -91,5 +91,6 @@ export const enComponents: Pick<Translations, "components"> = {
     explorerChangeBaseline: "Change baseline",
     explorerBaselineCardChange: "Change baseline",
     explorerBaselineCardClear: "Clear",
+    explorerBaselineWorkspaceLine: "Comparing components to baseline snapshot.",
   },
 };

@@ -191,3 +191,18 @@ test("rowMatchesExplorerCompareScope: no payload hides narrowed filters", () => 
     false
   );
 });
+
+test("rowMatchesExplorerCompareScope: workspace mode null activeSourceRoot applies filter per row", () => {
+  assert.strictEqual(
+    rowMatchesExplorerCompareScope({
+      compareFilter: "worse",
+      compareDropdownEnabled: true,
+      activeSourceRoot: null,
+      itemSourceRoot: "projects/other/src",
+      hasBaselinePayload: true,
+      hasDiff: true,
+      compareKind: "worse",
+    }),
+    true
+  );
+});

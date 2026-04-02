@@ -128,13 +128,16 @@ function getRiskBadgeClass(riskLevel: string): string {
   return "high";
 }
 
-function renderSnapshotCompareModal(): string {
+function renderSnapshotCompareModal(t: ReturnType<typeof getTranslations>): string {
+  const tf = t.filters as Record<string, string | undefined>;
+  const title = tf.snapshotCompareModalTitle ?? "Compare with previous snapshot";
+  const helper = tf.snapshotCompareModalHelper ?? "Choose a stored snapshot to compare this run against.";
   return `
   <div id="snapshot-compare-modal" class="snapshot-compare-modal" hidden aria-hidden="true">
     <div class="snapshot-compare-modal-backdrop" data-snapshot-compare-close tabindex="-1"></div>
     <div class="snapshot-compare-modal-panel" role="dialog" aria-modal="true" aria-labelledby="snapshot-compare-modal-title">
-      <h3 id="snapshot-compare-modal-title" class="snapshot-compare-modal-title">Compare with previous snapshot</h3>
-      <p class="snapshot-compare-modal-helper text-muted">Select a baseline snapshot. Project cards show a compact summary compared to that run.</p>
+      <h3 id="snapshot-compare-modal-title" class="snapshot-compare-modal-title">${escapeHtml(title)}</h3>
+      <p class="snapshot-compare-modal-helper text-muted">${escapeHtml(helper)}</p>
       <div class="snapshot-compare-list" data-snapshot-compare-list></div>
       <div class="snapshot-compare-modal-actions">
         <button type="button" class="snapshot-compare-modal-close-btn" data-snapshot-compare-close>Close</button>
@@ -143,24 +146,53 @@ function renderSnapshotCompareModal(): string {
   </div>`;
 }
 
-function renderProjectCompareDetailModal(t: ReturnType<typeof getTranslations>): string {
-  const tf = t.filters as Record<string, string | undefined>;
-  const subtitle =
-    tf.projectCompareDetailsSubtitle ?? "Differences between the selected baseline snapshot and this run.";
+function renderOverviewCompareDetailModal(t: ReturnType<typeof getTranslations>): string {
+  const o = t.overview;
+  const title = o.compareDetailModalTitle ?? "Baseline vs current report";
+  const closeLbl = o.compareDetailClose ?? "Close";
   return `
-  <div id="project-compare-detail-modal" class="project-compare-detail-modal" hidden aria-hidden="true">
-    <div class="project-compare-detail-modal-backdrop" data-project-compare-detail-close tabindex="-1"></div>
-    <div class="project-compare-detail-modal-panel" role="dialog" aria-modal="true" aria-labelledby="project-compare-detail-modal-title" aria-describedby="project-compare-detail-modal-subtitle">
-      <div class="project-compare-detail-modal-head">
-        <div class="project-compare-detail-modal-head-text">
-          <h3 id="project-compare-detail-modal-title" class="project-compare-detail-modal-title"></h3>
-          <p id="project-compare-detail-modal-subtitle" class="project-compare-detail-modal-subtitle text-muted">${escapeHtml(subtitle)}</p>
-        </div>
-        <button type="button" class="project-compare-detail-modal-dismiss" data-project-compare-detail-close aria-label="Close">&times;</button>
+  <div id="overview-compare-detail-modal" class="overview-compare-detail-modal" hidden aria-hidden="true">
+    <div class="overview-compare-detail-backdrop" data-overview-compare-detail-close tabindex="-1"></div>
+    <div class="overview-compare-detail-panel" role="dialog" aria-modal="true" aria-labelledby="overview-compare-detail-title">
+      <div class="overview-compare-detail-head">
+        <h3 id="overview-compare-detail-title" class="overview-compare-detail-title">${escapeHtml(title)}</h3>
+        <button type="button" class="overview-compare-detail-dismiss" data-overview-compare-detail-close aria-label="${escapeHtml(closeLbl)}">×</button>
       </div>
-      <div id="project-compare-detail-modal-body" class="project-compare-detail-modal-body"></div>
+      <div id="overview-compare-detail-body" class="overview-compare-detail-body" data-overview-compare-detail-body></div>
+      <div class="overview-compare-detail-footer">
+        <button type="button" class="overview-compare-detail-close-btn" data-overview-compare-detail-close>${escapeHtml(closeLbl)}</button>
+      </div>
     </div>
   </div>`;
+}
+
+function renderOverviewComparePanel(t: ReturnType<typeof getTranslations>, snapshotHistory: SnapshotSummary[]): string {
+  if (snapshotHistory.length === 0) return "";
+  const o = t.overview;
+  const title = o.compareSectionTitle ?? "Compare";
+  const cta = o.compareReportCta ?? "Compare this report with a previous snapshot";
+  const changeLbl = o.compareChangeBaseline ?? "Change baseline";
+  const clearLbl = o.compareClearCompare ?? "Clear compare";
+  const detailBtn = o.compareDetailViewDetailsBtn ?? "View compare details";
+  return `
+    <div id="overview-compare-panel" class="overview-compare-panel overview-section" data-overview-compare-panel>
+      <h2 class="page-section-title section-title-caps">${escapeHtml(title)}</h2>
+      <div class="overview-compare-inner" data-overview-compare-inner>
+        <div class="overview-compare-idle" data-overview-compare-idle>
+          <button type="button" class="overview-compare-cta-btn" data-overview-compare-open>${escapeHtml(cta)}</button>
+        </div>
+        <div class="overview-compare-active" data-overview-compare-active hidden>
+          <p class="overview-compare-baseline text-muted" data-overview-compare-baseline></p>
+          <p class="overview-compare-summary overview-compare-summary-trigger" data-overview-compare-summary data-overview-compare-summary-open role="button" tabindex="0" title="${escapeHtml(detailBtn)}"></p>
+          <p class="overview-compare-top-area text-muted" data-overview-compare-top-area hidden></p>
+          <div class="overview-compare-actions">
+            <button type="button" class="overview-compare-details-btn" data-overview-compare-details-open>${escapeHtml(detailBtn)}</button>
+            <button type="button" class="overview-compare-change-btn" data-overview-compare-change>${escapeHtml(changeLbl)}</button>
+            <button type="button" class="overview-compare-clear-btn" data-overview-compare-clear>${escapeHtml(clearLbl)}</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
 }
 
 export interface RenderOptions {
@@ -257,8 +289,8 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
   </div>
 
   ${renderDetailModalShell(t)}
-  ${renderSnapshotCompareModal()}
-  ${renderProjectCompareDetailModal(t)}
+  ${renderSnapshotCompareModal(t)}
+  ${renderOverviewCompareDetailModal(t)}
 
   <script>
     window.__REPORT_META__ = ${JSON.stringify(snapshot.meta).replace(/<\/script>/gi, "<\\/script>")};
@@ -415,6 +447,10 @@ function renderOverviewPage(
     );
   }
 
+  if (snapshotHistory.length > 0) {
+    html += renderOverviewComparePanel(t, snapshotHistory);
+  }
+
   if (result.projectBreakdown.length > 0) {
     html += renderProjectBreakdownCards(
       result.projectBreakdown.map((p) => ({
@@ -428,8 +464,7 @@ function renderOverviewPage(
       })),
       t,
       result.breakdownMode,
-      result.otherMinorClusters,
-      { compareEnabled: snapshotHistory.length > 0 }
+      result.otherMinorClusters
     );
   }
 
@@ -535,10 +570,14 @@ function renderComponentsPage(
   const baselineProjectTpl = tc.explorerBaselineComparingProject ?? "Comparing project: {project}";
   const baselineSnapshotTpl = tc.explorerBaselineSnapshotLabel ?? "Baseline snapshot: {date}";
   const baselineChangeLbl = tc.explorerChangeBaseline ?? "Change baseline";
+  const componentsCompareCta = (tf as Record<string, string | undefined>).componentsCompareCta ?? "Compare components with a previous snapshot";
   const filtersHtml = `
     <div class="components-page-header">
       <h2 class="page-section-title section-title-caps">${escapeHtml(pageTitle)}</h2>
       ${pageHelper ? `<p class="section-helper text-muted">${escapeHtml(pageHelper)}</p>` : ""}
+    </div>
+    <div class="components-compare-entry" data-components-compare-entry>
+      <button type="button" class="components-compare-entry-btn" data-components-compare-open>${escapeHtml(componentsCompareCta)}</button>
     </div>
     <div id="components-explorer-baseline-bar" class="components-explorer-baseline-bar" hidden aria-live="polite">
       <div class="components-explorer-baseline-main">

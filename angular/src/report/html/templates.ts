@@ -699,10 +699,8 @@ export function renderProjectBreakdownCards(
     templateFindings?: number;
     responsibilityFindings?: number;
     lifecycleFindings?: number;
-  }>,
-  compareOptions?: { compareEnabled?: boolean }
+  }>
 ): string {
-  const compareEnabled = compareOptions?.compareEnabled === true;
   let projects = projectBreakdown.filter((p) => p.components > 0);
   const totalFindings = (p: typeof projects[0]) =>
     (p.componentFindings ?? p.componentsWithFindings ?? 0) + (p.templateFindings ?? 0) + (p.responsibilityFindings ?? 0) + (p.lifecycleFindings ?? 0);
@@ -777,27 +775,12 @@ export function renderProjectBreakdownCards(
     </div>`;
       }
 
-      const compareKicker =
-        (t.filters as { projectCompareStripKicker?: string }).projectCompareStripKicker ?? "Compare";
-      const compareStrip = compareEnabled
-        ? `<p class="project-compare-strip-kicker">${escapeHtml(compareKicker)}</p>
-      <button type="button" class="project-compare-btn" data-project-compare data-source-root="${escapeHtml(p.sourceRoot)}">Compare with previous snapshot</button>
-      <div class="project-compare-status" data-project-compare-status data-source-root="${escapeHtml(p.sourceRoot)}" hidden></div>
-      <div class="project-compare-diff-wrap">
-        <div class="project-compare-diff project-compare-diff-compact" data-project-compare-diff data-source-root="${escapeHtml(p.sourceRoot)}" hidden></div>
-      </div>
-      <button type="button" class="project-compare-details-toggle" data-project-compare-toggle-details data-source-root="${escapeHtml(p.sourceRoot)}" hidden aria-haspopup="dialog" aria-controls="project-compare-detail-modal">${escapeHtml(
-        (t.filters as { projectCompareViewDetails?: string }).projectCompareViewDetails ?? "View details"
-      )}</button>`
-        : "";
-
       return `
     <div class="project-breakdown-card ${isWorst ? "project-breakdown-worst" : ""}" data-project-card-source="${escapeHtml(p.sourceRoot)}">
       <div class="project-name">${escapeHtml(shortName)}</div>
       <div class="project-stats">${p.components} components</div>
       <div class="project-warnings">${total} findings</div>
       ${dimension ? `<div class="project-dimension"><span class="project-dimension-label">${escapeHtml(t.overview.primaryPressureArea)}:</span> ${escapeHtml(dimension)}</div>` : ""}
-      ${compareStrip}
     </div>`;
     })
     .join("");

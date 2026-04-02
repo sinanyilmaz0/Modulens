@@ -440,7 +440,8 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         if (ct === "issueChanged") return "changed";
         return null;
       }
-      if (typeof window.__activeCompareContext__ === "undefined") window.__activeCompareContext__ = null;
+      if (typeof window.__overviewCompareHistoryIndex__ === "undefined") window.__overviewCompareHistoryIndex__ = null;
+      if (typeof window.__componentsCompareHistoryIndex__ === "undefined") window.__componentsCompareHistoryIndex__ = null;
       function formatProjectShortName(sourceRoot) {
         if (!sourceRoot) return "";
         var s = String(sourceRoot);
@@ -452,71 +453,16 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         return t || s;
       }
       window.__formatProjectShortName__ = formatProjectShortName;
-      function ensureActiveCompareContext() {
-        var baselineMap = window.__baselineBySourceRoot__ || {};
-        var keys = [];
-        for (var k in baselineMap) {
-          if (Object.prototype.hasOwnProperty.call(baselineMap, k) && baselineMap[k] != null && baselineMap[k] !== undefined) keys.push(k);
-        }
-        keys.sort();
-        if (keys.length === 0) {
-          window.__activeCompareContext__ = null;
-          return;
-        }
-        var cur = window.__activeCompareContext__;
-        if (cur && keys.indexOf(cur.sourceRoot) >= 0) return;
-        window.__activeCompareContext__ = { sourceRoot: keys[0], historyIndex: baselineMap[keys[0]] };
-      }
-      window.__ensureActiveCompareContext__ = ensureActiveCompareContext;
-      function getActiveCompareSourceRoot() {
-        var ctx = window.__activeCompareContext__;
-        return ctx && ctx.sourceRoot ? ctx.sourceRoot : null;
-      }
-      function findProjectCardEl(sourceRoot) {
-        if (!sourceRoot) return null;
-        var nodes = document.querySelectorAll("[data-project-card-source]");
-        for (var i = 0; i < nodes.length; i++) {
-          if (nodes[i].getAttribute("data-project-card-source") === sourceRoot) return nodes[i];
-        }
-        return null;
-      }
-      function getProjectDisplayNameFromCard(sourceRoot) {
-        var card = findProjectCardEl(sourceRoot);
-        if (!card) return null;
-        var nameEl = card.querySelector(".project-name");
-        if (!nameEl) return null;
-        var text = (nameEl.textContent || "").trim();
-        return text || null;
-      }
-      function syncCompareActiveCardHighlight() {
-        var cards = document.querySelectorAll(".project-breakdown-card[data-project-card-source]");
-        for (var ci = 0; ci < cards.length; ci++) {
-          cards[ci].classList.remove("project-breakdown-card--compare-active");
-        }
-        ensureActiveCompareContext();
-        var activeSr = getActiveCompareSourceRoot();
-        if (!activeSr) return;
-        var bm = window.__baselineBySourceRoot__ || {};
-        if (bm[activeSr] == null || bm[activeSr] === undefined) return;
-        var activeCard = findProjectCardEl(activeSr);
-        if (activeCard) activeCard.classList.add("project-breakdown-card--compare-active");
-      }
       function updateCompareFilterControlState() {
         var el = document.getElementById("filter-compare-diff");
         if (!el) return;
-        var baselineMap = window.__baselineBySourceRoot__ || {};
-        var any = false;
-        for (var k in baselineMap) {
-          if (Object.prototype.hasOwnProperty.call(baselineMap, k) && baselineMap[k] != null && baselineMap[k] !== undefined) {
-            any = true;
-            break;
-          }
-        }
+        var idx = window.__componentsCompareHistoryIndex__;
+        var any = idx != null && idx !== undefined;
         el.disabled = !any;
         if (!any) el.value = "all";
         var tFil = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
         var hintOn = (tFil && tFil.compareFilterHelper) || "";
-        var hintOff = (tFil && tFil.compareFilterDisabledHint) || "Choose a baseline from a project card first.";
+        var hintOff = (tFil && tFil.compareFilterDisabledHint) || "Select a baseline to enable component compare filters.";
         var baseLbl = (tFil && tFil.compareBaseline) || "Compare vs baseline";
         el.title = any ? hintOn : hintOff;
         el.setAttribute("aria-label", any ? baseLbl + (hintOn ? ". " + hintOn : "") : hintOff);
@@ -530,17 +476,9 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         var clearBtn = document.getElementById("components-explorer-baseline-clear");
         var changeBtn = document.getElementById("components-explorer-baseline-change");
         if (!bar) return;
-        ensureActiveCompareContext();
-        var baselineMap = window.__baselineBySourceRoot__ || {};
+        var idxBar = window.__componentsCompareHistoryIndex__;
         var hist = Array.isArray(window.__SNAPSHOT_HISTORY__) ? window.__SNAPSHOT_HISTORY__ : [];
-        var anyBaseline = false;
-        for (var kb in baselineMap) {
-          if (Object.prototype.hasOwnProperty.call(baselineMap, kb) && baselineMap[kb] != null && baselineMap[kb] !== undefined) {
-            anyBaseline = true;
-            break;
-          }
-        }
-        if (!anyBaseline) {
+        if (idxBar == null || idxBar === undefined) {
           bar.hidden = true;
           bar.classList.remove("components-explorer-baseline-bar--active");
           if (clearBtn) clearBtn.hidden = true;
@@ -549,47 +487,43 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           if (snapshotLine) snapshotLine.textContent = "";
           if (summaryEl) summaryEl.textContent = "";
           if (legacyText) legacyText.textContent = "";
-          syncCompareActiveCardHighlight();
           return;
         }
-        var activeSr = getActiveCompareSourceRoot();
-        if (!activeSr) {
-          bar.hidden = true;
-          bar.classList.remove("components-explorer-baseline-bar--active");
-          if (clearBtn) clearBtn.hidden = true;
-          if (changeBtn) changeBtn.hidden = true;
-          syncCompareActiveCardHighlight();
-          return;
-        }
-        var idxBar = baselineMap[activeSr];
-        var snap = idxBar != null && idxBar !== undefined ? hist[idxBar] : null;
+        var snap = hist[idxBar];
         var dateStr = "—";
         if (snap && snap.generatedAt) {
           try { dateStr = new Date(snap.generatedAt).toLocaleString(); } catch (eBar) {}
         }
         var tComp = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
-        var projTpl = (tComp && tComp.explorerBaselineComparingProject) || "Comparing project: {project}";
+        var projLineText = (tComp && tComp.explorerBaselineWorkspaceLine) || "Comparing components to baseline snapshot.";
         var snapTpl = (tComp && tComp.explorerBaselineSnapshotLabel) || "Baseline snapshot: {date}";
         var sumTpl = (tComp && tComp.explorerBaselineSummaryShort) || "{resolved} resolved · {worsened} worsened · {improved} improved";
-        var displayName = getProjectDisplayNameFromCard(activeSr) || formatProjectShortName(activeSr);
-        if (projectLine) {
-          var pt = projectLine.getAttribute("data-template-project") || projTpl;
-          projectLine.textContent = pt.replace("{project}", displayName);
-        }
+        if (projectLine) projectLine.textContent = projLineText;
         if (snapshotLine) {
           var st = snapshotLine.getAttribute("data-template-snapshot") || snapTpl;
           snapshotLine.textContent = st.replace("{date}", dateStr);
         }
         var compsB = getSnapshotComparisons();
-        var bkeyB = idxBar != null && idxBar !== undefined ? baselineKeyFromHistoryIndex(idxBar) : null;
+        var bkeyB = baselineKeyFromHistoryIndex(idxBar);
         var payloadB = bkeyB ? compsB[bkeyB] : null;
-        var pcB = payloadB && payloadB.projectComparisons ? payloadB.projectComparisons[activeSr] : null;
+        var resolvedT = 0;
+        var worsenedT = 0;
+        var improvedT = 0;
+        if (payloadB && payloadB.projectComparisons) {
+          for (var pk in payloadB.projectComparisons) {
+            if (!Object.prototype.hasOwnProperty.call(payloadB.projectComparisons, pk)) continue;
+            var pj = payloadB.projectComparisons[pk];
+            resolvedT += pj.resolvedCount != null ? pj.resolvedCount : 0;
+            worsenedT += pj.worsenedCount != null ? pj.worsenedCount : 0;
+            improvedT += pj.improvedCount != null ? pj.improvedCount : 0;
+          }
+        }
         if (summaryEl) {
-          if (pcB) {
+          if (payloadB) {
             summaryEl.textContent = sumTpl
-              .replace("{resolved}", String(pcB.resolvedCount != null ? pcB.resolvedCount : 0))
-              .replace("{worsened}", String(pcB.worsenedCount != null ? pcB.worsenedCount : 0))
-              .replace("{improved}", String(pcB.improvedCount != null ? pcB.improvedCount : 0));
+              .replace("{resolved}", String(resolvedT))
+              .replace("{worsened}", String(worsenedT))
+              .replace("{improved}", String(improvedT));
           } else {
             summaryEl.textContent = (window.__TRANSLATIONS__ && window.__TRANSLATIONS__.empty && window.__TRANSLATIONS__.empty.noCompareDataForBaseline) || "";
           }
@@ -602,7 +536,6 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         bar.classList.add("components-explorer-baseline-bar--active");
         if (clearBtn) clearBtn.hidden = false;
         if (changeBtn) changeBtn.hidden = false;
-        syncCompareActiveCardHighlight();
       }
 
       function syncExplorerCompare() {
@@ -610,7 +543,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         if (!listWrap) return;
         var rows = listWrap.querySelectorAll(".component-explorer-row");
         var comps = getSnapshotComparisons();
-        var baselineMap = window.__baselineBySourceRoot__ || {};
+        var compIdx = window.__componentsCompareHistoryIndex__;
         var tComp = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
         var lbl = {
           new: (tComp && tComp.compareBadgeNew) || "New",
@@ -624,7 +557,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           var slot = row.querySelector("[data-compare-badges-slot]");
           var sr = row.getAttribute("data-source-root") || row.getAttribute("data-project") || "";
           var ck = row.getAttribute("data-component-key") || "";
-          var idx = baselineMap[sr];
+          var idx = compIdx;
           var bkey = idx != null && idx !== undefined ? baselineKeyFromHistoryIndex(idx) : null;
           var payload = bkey ? comps[bkey] : null;
           var pc = payload && payload.projectComparisons ? payload.projectComparisons[sr] : null;
@@ -692,24 +625,21 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         var structurePathSet = structurePaths ? new Set(structurePaths.map(function(p){ return (p || "").replace(/\\\\/g, "/"); })) : null;
 
         var showHealthy = showHealthyCheckbox ? showHealthyCheckbox.checked : false;
-        ensureActiveCompareContext();
         var compareFilter = compareSelect && !compareSelect.disabled ? (compareSelect.value || "all") : "all";
-        var activeSourceRoot = getActiveCompareSourceRoot();
+        var compIdxF = window.__componentsCompareHistoryIndex__;
         function matchCompareFilter(row) {
           if (!compareSelect || compareSelect.disabled) return true;
           var itemProject = row.getAttribute("data-source-root") || row.getAttribute("data-project") || "";
-          var baselineMap = window.__baselineBySourceRoot__ || {};
           var compsF = getSnapshotComparisons();
-          if (!activeSourceRoot) return true;
-          if (itemProject !== activeSourceRoot) return false;
-          var idxF = baselineMap[activeSourceRoot];
-          var bkeyF = idxF != null && idxF !== undefined ? baselineKeyFromHistoryIndex(idxF) : null;
+          if (compIdxF == null || compIdxF === undefined) return true;
+          var bkeyF = baselineKeyFromHistoryIndex(compIdxF);
           var payloadF = bkeyF ? compsF[bkeyF] : null;
           var hasPayload = !!(bkeyF && payloadF);
+          var pcRow = payloadF && payloadF.projectComparisons ? payloadF.projectComparisons[itemProject] : null;
           var hasDiff = row.hasAttribute("data-compare-impact");
           var kind = row.getAttribute("data-compare-kind") || "";
           if (compareFilter === "all") return true;
-          if (!hasPayload) return false;
+          if (!hasPayload || !pcRow) return false;
           if (compareFilter === "changed-only") return hasDiff;
           if (!hasDiff) return false;
           if (compareFilter === "worse") return kind === "worse";
@@ -783,27 +713,12 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         if (emptyTitle && emptyHint && tEmptyDyn && totalVisible === 0) {
           var compareFilterActive =
             compareSelect && !compareSelect.disabled && compareFilter && compareFilter !== "all";
-          var compareScopeActive = compareSelect && !compareSelect.disabled && activeSourceRoot;
           if (compareFilterActive && tEmptyDyn.noComparedComponentsFilter) {
             emptyTitle.textContent = tEmptyDyn.noComparedComponentsFilter;
             emptyHint.textContent = (tEmptyDyn.noCompareFilterHint) || "";
           } else if (compareFilterActive && tEmptyDyn.noCompareFilterResults) {
             emptyTitle.textContent = tEmptyDyn.noCompareFilterResults;
             emptyHint.textContent = (tEmptyDyn.noCompareFilterHint) || "";
-          } else if (
-            !search &&
-            compareScopeActive &&
-            compareFilter === "all" &&
-            (issueType === "all" || !issueType) &&
-            (severity === "all" || !severity) &&
-            !structureFilter &&
-            !ruleFilter &&
-            !projectFilter &&
-            showHealthy &&
-            tEmptyDyn.noCompareProjectScope
-          ) {
-            emptyTitle.textContent = tEmptyDyn.noCompareProjectScope;
-            emptyHint.textContent = (tEmptyDyn.noMatchFiltersHint) || "";
           } else if (search) {
             if (tEmptyDyn.noMatchSearch) emptyTitle.textContent = tEmptyDyn.noMatchSearch;
             var hasOtherFilters = (issueType && issueType !== "all") || (severity && severity !== "all") || !!structureFilter || !!ruleFilter || !!projectFilter || !showHealthy;
@@ -852,14 +767,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
 
         var compSumm = document.getElementById("components-compare-summary");
         if (compSumm && rows.length > 0) {
-          var baselineMap2 = window.__baselineBySourceRoot__ || {};
-          var hasAnyBaseline = false;
-          for (var bk in baselineMap2) {
-            if (Object.prototype.hasOwnProperty.call(baselineMap2, bk) && baselineMap2[bk] != null && baselineMap2[bk] !== undefined) {
-              hasAnyBaseline = true;
-              break;
-            }
-          }
+          var hasAnyBaseline = window.__componentsCompareHistoryIndex__ != null && window.__componentsCompareHistoryIndex__ !== undefined;
           var countsCmp = { worsened: 0, improved: 0, resolved: 0, newC: 0, issueCh: 0 };
           for (var vi = 0; vi < visibleRows.length; vi++) {
             var vr = visibleRows[vi];
@@ -1885,10 +1793,9 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           var sr = entry.sourceRoot || "";
           var fp = entry.filePath || "";
           if (!sr || !fp) return "";
-          var baselineMap = window.__baselineBySourceRoot__ || {};
-          var idx = baselineMap[sr];
-          if (idx == null || idx === undefined) return "";
-          var bkey = baselineKeyFromHistoryIndex(idx);
+          var idxD = window.__componentsCompareHistoryIndex__;
+          if (idxD == null || idxD === undefined) return "";
+          var bkey = baselineKeyFromHistoryIndex(idxD);
           if (!bkey) return "";
           var comps = getSnapshotComparisons();
           var payload = comps[bkey];
@@ -2263,49 +2170,11 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
 
       (function initSnapshotComparePicker() {
         var modal = document.getElementById("snapshot-compare-modal");
-        var detailModal = document.getElementById("project-compare-detail-modal");
-        var detailModalBody = document.getElementById("project-compare-detail-modal-body");
-        var detailModalTitle = document.getElementById("project-compare-detail-modal-title");
         var listEl = document.querySelector("[data-snapshot-compare-list]");
-        var pickerSourceRoot = null;
-
-        function closeProjectCompareDetailModal() {
-          if (!detailModal || detailModal.hasAttribute("hidden")) return;
-          detailModal.setAttribute("hidden", "hidden");
-          detailModal.setAttribute("aria-hidden", "true");
-          if (detailModalBody) detailModalBody.innerHTML = "";
-        }
-        window.__closeProjectCompareDetailModal__ = closeProjectCompareDetailModal;
-        var baselineBySourceRoot = {};
-        window.__baselineBySourceRoot__ = baselineBySourceRoot;
-        window.__activeCompareContext__ = window.__activeCompareContext__ || null;
+        var pickerTarget = null;
 
         function getHistory() {
           return Array.isArray(window.__SNAPSHOT_HISTORY__) ? window.__SNAPSHOT_HISTORY__ : [];
-        }
-
-        function findStatusEl(sourceRoot) {
-          var nodes = document.querySelectorAll("[data-project-compare-status]");
-          for (var i = 0; i < nodes.length; i++) {
-            if (nodes[i].getAttribute("data-source-root") === sourceRoot) return nodes[i];
-          }
-          return null;
-        }
-
-        function findDiffEl(sourceRoot) {
-          var nodes = document.querySelectorAll("[data-project-compare-diff]");
-          for (var i = 0; i < nodes.length; i++) {
-            if (nodes[i].getAttribute("data-source-root") === sourceRoot) return nodes[i];
-          }
-          return null;
-        }
-
-        function findToggleEl(sourceRoot) {
-          var nodes = document.querySelectorAll("[data-project-compare-toggle-details]");
-          for (var i = 0; i < nodes.length; i++) {
-            if (nodes[i].getAttribute("data-source-root") === sourceRoot) return nodes[i];
-          }
-          return null;
         }
 
         function getComparisons() {
@@ -2337,310 +2206,96 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           return "0";
         }
 
-        function clearProjectComparePanel(diffEl) {
-          closeProjectCompareDetailModal();
-          if (!diffEl) return;
-          var sr = diffEl.getAttribute("data-source-root");
-          diffEl.innerHTML = "";
-          diffEl.hidden = true;
-          var tg = sr ? findToggleEl(sr) : null;
-          if (tg) {
-            tg.hidden = true;
-            tg.setAttribute("aria-expanded", "false");
-            var tFilC = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
-            tg.textContent = (tFilC && tFilC.projectCompareViewDetails) || "View details";
+        function updateOverviewComparePanel() {
+          var panel = document.querySelector("[data-overview-compare-panel]");
+          if (!panel) return;
+          var idle = panel.querySelector("[data-overview-compare-idle]");
+          var active = panel.querySelector("[data-overview-compare-active]");
+          var baselineEl = panel.querySelector("[data-overview-compare-baseline]");
+          var summaryEl = panel.querySelector("[data-overview-compare-summary]");
+          var topAreaEl = panel.querySelector("[data-overview-compare-top-area]");
+          var idx = window.__overviewCompareHistoryIndex__;
+          var tOv = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.overview;
+          var o = tOv && typeof tOv === "object" ? tOv : {};
+          if (idx == null || idx === undefined) {
+            if (idle) idle.hidden = false;
+            if (active) active.hidden = true;
+            return;
+          }
+          if (idle) idle.hidden = true;
+          if (active) active.hidden = false;
+          var hist = getHistory();
+          var s = hist[idx];
+          var dateStr = "—";
+          if (s && s.generatedAt) {
+            try {
+              dateStr = new Date(s.generatedAt).toLocaleString();
+            } catch (e0) {}
+          }
+          var baseTpl = o.compareBaselineSnapshot || "Baseline snapshot: {date}";
+          if (baselineEl) baselineEl.textContent = baseTpl.replace("{date}", dateStr);
+          var key = baselineKeyFromIndex(idx);
+          var payload = key ? getComparisons()[key] : null;
+          var ws = payload && payload.workspace ? payload.workspace : null;
+          if (summaryEl) {
+            if (!ws) {
+              summaryEl.textContent = "";
+            } else {
+              var tf = ws.totalFindings;
+              var fd = tf && typeof tf.delta === "number" ? formatSigned(tf.delta) : "0";
+              var os = ws.overallScore;
+              var osd = os && typeof os.delta === "number" ? formatSignedFloat(os.delta) : "0";
+              var cr = ws.criticalCount;
+              var cd = cr && typeof cr.delta === "number" ? formatSigned(cr.delta) : "0";
+              var hi = ws.highCount;
+              var hd = hi && typeof hi.delta === "number" ? formatSigned(hi.delta) : "0";
+              var wa = ws.warningSeverityCount;
+              var wd = wa && typeof wa.delta === "number" ? formatSigned(wa.delta) : "0";
+              var l1 = (o.compareWorkspaceFindingsDelta || "Findings {delta} vs baseline").replace("{delta}", fd);
+              var l2 = (o.compareWorkspaceScoreDelta || "Overall score {delta}").replace("{delta}", osd);
+              var l3 = (o.compareWorkspaceSeverityDelta || "Critical {cd}, High {hd}, Warning {wd}")
+                .replace("{cd}", cd)
+                .replace("{hd}", hd)
+                .replace("{wd}", wd);
+              summaryEl.textContent = l1 + " · " + l2 + " · " + l3;
+            }
+          }
+          if (topAreaEl) {
+            topAreaEl.hidden = true;
+            topAreaEl.textContent = "";
+            if (payload && payload.projectComparisons) {
+              var best = null;
+              var bestScore = -1;
+              for (var pr in payload.projectComparisons) {
+                if (!Object.prototype.hasOwnProperty.call(payload.projectComparisons, pr)) continue;
+                var pcx = payload.projectComparisons[pr];
+                var sc = Math.abs(pcx.worsenedCount || 0) + Math.abs(pcx.improvedCount || 0) + Math.abs(pcx.resolvedCount || 0);
+                if (sc > bestScore) {
+                  bestScore = sc;
+                  best = pr;
+                }
+              }
+              if (best && bestScore > 0) {
+                var fnShort = window.__formatProjectShortName__ || function(x) {
+                  return x || "";
+                };
+                var note = (o.compareTopChangedArea || "Largest shift: {area}").replace("{area}", fnShort(best));
+                topAreaEl.textContent = note;
+                topAreaEl.hidden = false;
+              }
+            }
           }
         }
 
-        function renderProjectCompareDetailsBody(pc, payload, sourceRoot, omitHeader) {
-          var sd = pc.summaryDeltas || {};
-          var fnShort = window.__formatProjectShortName__ || function(x) { return x || ""; };
-          var shortP = fnShort(sourceRoot);
-          var tFilH = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
-          var titleTpl = (tFilH && tFilH.projectCompareDetailsTitle) || "{project} — compare details";
-          var secMetrics = (tFilH && tFilH.projectCompareSectionMetrics) || "Summary";
-          var secDim = (tFilH && tFilH.projectCompareSectionDimensions) || "Findings by dimension";
-          var secHigh = (tFilH && tFilH.projectCompareSectionHighlights) || "Highlights";
-          var lblFd = (tFilH && tFilH.projectCompareLabelFindingsDelta) || "Findings Δ";
-          var lblWo = (tFilH && tFilH.projectCompareLabelWorsened) || "Worsened";
-          var lblIm = (tFilH && tFilH.projectCompareLabelImproved) || "Improved";
-          var lblRe = (tFilH && tFilH.projectCompareLabelResolved) || "Resolved";
-          var lblDc = (tFilH && tFilH.projectCompareDimComponent) || "Component";
-          var lblDl = (tFilH && tFilH.projectCompareDimLifecycle) || "Lifecycle";
-          var lblDt = (tFilH && tFilH.projectCompareDimTemplate) || "Template";
-          var lblDr = (tFilH && tFilH.projectCompareDimResponsibility) || "Responsibility";
-          var lblTopReg = (tFilH && tFilH.projectCompareTopRegressions) || "Largest regressions";
-          var lblTopImp = (tFilH && tFilH.projectCompareTopImprovements) || "Largest improvements";
-          var lblRuUp = (tFilH && tFilH.projectCompareRulesIncreasing) || "Rules increasing";
-          var lblRuDn = (tFilH && tFilH.projectCompareRulesDecreasing) || "Rules decreasing";
-          var warnTpl = (tFilH && tFilH.projectCompareWarningsDelta) || "{n} warnings";
-          function warnDelta(signedPart) {
-            return esc(warnTpl.replace("{n}", signedPart));
-          }
-          var headerHtml = omitHeader
-            ? ""
-            : "<header class=\\"project-compare-details-header\\"><h3 class=\\"project-compare-details-heading\\">" +
-              esc(titleTpl.replace("{project}", shortP)) +
-              "</h3></header>";
-          var pFindingsDelta =
-            (sd.componentFindings || 0) +
-            (sd.lifecycleFindings || 0) +
-            (sd.templateFindings || 0) +
-            (sd.responsibilityFindings || 0);
-          function chipStacked(valueHtml, label, extraClass) {
-            var cls = "project-compare-detail-chip project-compare-detail-chip--stacked" + (extraClass ? " " + extraClass : "");
-            return (
-              "<span class=\\"" + cls + "\\">" +
-              "<span class=\\"project-compare-detail-chip-value\\">" +
-              valueHtml +
-              "</span>" +
-              "<span class=\\"project-compare-detail-chip-label\\">" +
-              esc(label) +
-              "</span></span>"
-            );
-          }
-          var chipsHtml =
-            "<section class=\\"project-compare-detail-section project-compare-detail-section--metrics\\" aria-labelledby=\\"project-compare-sec-metrics\\">" +
-            "<h4 id=\\"project-compare-sec-metrics\\" class=\\"project-compare-detail-section-title\\">" +
-            esc(secMetrics) +
-            "</h4>" +
-            "<div class=\\"project-compare-detail-chips\\" role=\\"group\\">" +
-            chipStacked(esc(formatSigned(pFindingsDelta)), lblFd, "") +
-            chipStacked(String(pc.worsenedCount || 0), lblWo, "project-compare-detail-chip-worse") +
-            chipStacked(String(pc.improvedCount || 0), lblIm, "project-compare-detail-chip-better") +
-            chipStacked(String(pc.resolvedCount || 0), lblRe, "") +
-            "</div></section>";
-          var dimInner =
-            "<div class=\\"project-compare-dimensions project-compare-dimensions--grid\\">" +
-            "<div class=\\"project-compare-dim-row\\"><span class=\\"project-compare-dim-label\\">" +
-            esc(lblDc) +
-            "</span><span class=\\"project-compare-dim-value\\">" +
-            esc(formatSigned(sd.componentFindings || 0)) +
-            "</span></div>" +
-            "<div class=\\"project-compare-dim-row\\"><span class=\\"project-compare-dim-label\\">" +
-            esc(lblDl) +
-            "</span><span class=\\"project-compare-dim-value\\">" +
-            esc(formatSigned(sd.lifecycleFindings || 0)) +
-            "</span></div>" +
-            "<div class=\\"project-compare-dim-row\\"><span class=\\"project-compare-dim-label\\">" +
-            esc(lblDt) +
-            "</span><span class=\\"project-compare-dim-value\\">" +
-            esc(formatSigned(sd.templateFindings || 0)) +
-            "</span></div>" +
-            "<div class=\\"project-compare-dim-row\\"><span class=\\"project-compare-dim-label\\">" +
-            esc(lblDr) +
-            "</span><span class=\\"project-compare-dim-value\\">" +
-            esc(formatSigned(sd.responsibilityFindings || 0)) +
-            "</span></div></div>";
-          var dimSection =
-            "<section class=\\"project-compare-detail-section project-compare-detail-section--dimensions\\" aria-labelledby=\\"project-compare-sec-dim\\">" +
-            "<h4 id=\\"project-compare-sec-dim\\" class=\\"project-compare-detail-section-title\\">" +
-            esc(secDim) +
-            "</h4>" +
-            dimInner +
-            "</section>";
-
-          function listSection(title, items, kind) {
-            if (!items || items.length === 0) return "";
-            var rows = items.slice(0, 5)
-              .map(function(it) {
-                var name = it.className || it.filePath || "";
-                var signed =
-                  kind === "worse"
-                    ? formatSigned((it.currentWarningCount || 0) - (it.previousWarningCount || 0))
-                    : formatSigned((it.previousWarningCount || 0) - (it.currentWarningCount || 0));
-                var sub = warnDelta(signed);
-                return (
-                  "<li><span class=\\"project-compare-comp-name\\">" +
-                  esc(name) +
-                  "</span> <span class=\\"project-compare-comp-meta\\">" +
-                  sub +
-                  "</span></li>"
-                );
-              })
-              .join("");
-            return (
-              "<div class=\\"project-compare-list-block\\"><div class=\\"project-compare-list-title\\">" +
-              esc(title) +
-              "</div><ul class=\\"project-compare-comp-list\\">" +
-              rows +
-              "</ul></div>"
-            );
-          }
-
-          function ruleList(title, rows) {
-            if (!rows || rows.length === 0) return "";
-            var lis = rows
-              .map(function(r) {
-                return (
-                  "<li><span class=\\"project-compare-rule-id\\">" +
-                  esc(resolveRuleTitle(r.ruleId)) +
-                  "</span> <span class=\\"project-compare-rule-delta\\">" +
-                  esc(formatSigned(r.delta)) +
-                  "</span></li>"
-                );
-              })
-              .join("");
-            return (
-              "<div class=\\"project-compare-list-block\\"><div class=\\"project-compare-list-title\\">" +
-              esc(title) +
-              "</div><ul class=\\"project-compare-rule-list\\">" +
-              lis +
-              "</ul></div>"
-            );
-          }
-          var colA = listSection(lblTopReg, pc.topWorsenedComponents, "worse") + listSection(lblTopImp, pc.topImprovedComponents, "better");
-          var colB = ruleList(lblRuUp, pc.topRuleIncreases) + ruleList(lblRuDn, pc.topRuleDecreases);
-          var twoCol =
-            "<section class=\\"project-compare-detail-section project-compare-detail-section--lists\\" aria-labelledby=\\"project-compare-sec-high\\">" +
-            "<h4 id=\\"project-compare-sec-high\\" class=\\"project-compare-detail-section-title project-compare-detail-section-title--full\\">" +
-            esc(secHigh) +
-            "</h4>" +
-            "<div class=\\"project-compare-details-columns\\">" +
-            "<div class=\\"project-compare-details-col\\">" +
-            colA +
-            "</div>" +
-            "<div class=\\"project-compare-details-col\\">" +
-            colB +
-            "</div>" +
-            "</div></section>";
-          return (
-            "<div class=\\"project-compare-details-inner" +
-            (omitHeader ? " project-compare-details-inner--modal" : "") +
-            "\\">" +
-            headerHtml +
-            chipsHtml +
-            dimSection +
-            twoCol +
-            "</div>"
-          );
-        }
-
-        function openProjectCompareDetailModal(sourceRoot) {
-          if (!detailModal || !detailModalBody) return;
-          closeModal();
-          var idxD = baselineBySourceRoot[sourceRoot];
-          var keyD = idxD != null && idxD !== undefined ? baselineKeyFromIndex(idxD) : null;
-          var payloadD = keyD ? getComparisons()[keyD] : null;
-          var tFilD = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
-          var fnShortD = window.__formatProjectShortName__ || function(x) { return x || ""; };
-          var shortPD = fnShortD(sourceRoot);
-          var titleTplD = (tFilD && tFilD.projectCompareDetailsTitle) || "{project} — compare details";
-          if (detailModalTitle) detailModalTitle.textContent = titleTplD.replace("{project}", shortPD);
-          if (!payloadD) {
-            var msgUD = (tFilD && tFilD.projectCompareUnavailable) || "Compare data is not available for this baseline.";
-            detailModalBody.innerHTML = "<div class=\\"project-compare-modal-empty\\">" + esc(msgUD) + "</div>";
-            detailModal.removeAttribute("hidden");
-            detailModal.setAttribute("aria-hidden", "false");
-            return;
-          }
-          var pcD = payloadD.projectComparisons ? payloadD.projectComparisons[sourceRoot] : null;
-          if (!pcD) {
-            var msgND = (tFilD && tFilD.projectCompareNoDiff) || "No snapshot changes for this project.";
-            detailModalBody.innerHTML = "<div class=\\"project-compare-modal-empty\\">" + esc(msgND) + "</div>";
-            detailModal.removeAttribute("hidden");
-            detailModal.setAttribute("aria-hidden", "false");
-            return;
-          }
-          detailModalBody.innerHTML = renderProjectCompareDetailsBody(pcD, payloadD, sourceRoot, true);
-          detailModal.removeAttribute("hidden");
-          detailModal.setAttribute("aria-hidden", "false");
-        }
-
-        function renderProjectComparePanel(diffEl, sourceRoot, payload) {
-          if (!diffEl) return;
-          var toggleBtn = findToggleEl(sourceRoot);
-          var tFil = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
-          var msgUnavailable = (tFil && tFil.projectCompareUnavailable) || "Compare data is not available for this baseline.";
-          var msgNoDiff = (tFil && tFil.projectCompareNoDiff) || "No snapshot changes for this project.";
-          var lblView = (tFil && tFil.projectCompareViewDetails) || "View details";
-          if (toggleBtn) {
-            toggleBtn.hidden = true;
-            toggleBtn.textContent = lblView;
-          }
-          if (!payload) {
-            diffEl.hidden = false;
-            diffEl.innerHTML = "<div class=\\"project-compare-diff-inner project-compare-diff-inner-compact\\"><div class=\\"project-compare-diff-warning\\">" + esc(msgUnavailable) + "</div></div>";
-            return;
-          }
-          var pc = payload.projectComparisons ? payload.projectComparisons[sourceRoot] : null;
-          if (!pc) {
-            diffEl.hidden = false;
-            diffEl.innerHTML = "<div class=\\"project-compare-diff-inner project-compare-diff-inner-compact\\"><div class=\\"project-compare-diff-empty\\">" + esc(msgNoDiff) + "</div></div>";
-            return;
-          }
-          var sd = pc.summaryDeltas || {};
-          var ws = payload.workspace || {};
-          var pFindingsDelta =
-            (sd.componentFindings || 0) +
-            (sd.lifecycleFindings || 0) +
-            (sd.templateFindings || 0) +
-            (sd.responsibilityFindings || 0);
-          var overallD = ws.overallScore && typeof ws.overallScore.delta === "number" ? ws.overallScore.delta : 0;
-          var compactParts = [];
-          compactParts.push("<div class=\\"project-compare-diff-inner project-compare-diff-inner-compact\\">");
-          compactParts.push(
-            "<div class=\\"project-compare-card-metrics\\" role=\\"group\\">" +
-              "<span class=\\"project-compare-card-chip project-compare-card-chip-findings\\">" +
-              esc(formatSigned(pFindingsDelta)) +
-              " findings Δ</span>" +
-              "<span class=\\"project-compare-card-chip\\">" +
-              esc(formatSignedFloat(overallD)) +
-              " overall</span>" +
-              "<span class=\\"project-compare-card-chip project-compare-card-chip-worse\\">" +
-              String(pc.worsenedCount) +
-              " worsened</span>" +
-              "<span class=\\"project-compare-card-chip project-compare-card-chip-better\\">" +
-              String(pc.improvedCount) +
-              " improved</span>" +
-              "<span class=\\"project-compare-card-chip\\">" +
-              String(pc.resolvedCount) +
-              " resolved</span>" +
-              "</div>"
-          );
-          compactParts.push("</div>");
-          diffEl.innerHTML = compactParts.join("");
-          diffEl.hidden = false;
-          if (toggleBtn) {
-            toggleBtn.hidden = false;
-          }
+        function updateComponentsCompareEntry() {
+          var btn = document.querySelector("[data-components-compare-open]");
+          if (!btn) return;
+          var on = window.__componentsCompareHistoryIndex__ != null && window.__componentsCompareHistoryIndex__ !== undefined;
+          btn.hidden = on;
         }
 
         function runExplorerCompareSync() {
           if (typeof window.__syncExplorerCompare === "function") window.__syncExplorerCompare();
-        }
-
-        function syncComparePanel(sourceRoot) {
-          var idx = baselineBySourceRoot[sourceRoot];
-          var diffEl = findDiffEl(sourceRoot);
-          if (idx == null || idx === undefined) {
-            clearProjectComparePanel(diffEl);
-            runExplorerCompareSync();
-            return;
-          }
-          var key = baselineKeyFromIndex(idx);
-          var payload = key ? getComparisons()[key] : null;
-          if (!key || !payload) {
-            if (diffEl) {
-              var tFil2 = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
-              var msgU2 = (tFil2 && tFil2.projectCompareUnavailable) || "Compare data is not available for this baseline.";
-              var tgU = findToggleEl(sourceRoot);
-              if (tgU) tgU.hidden = true;
-              diffEl.hidden = false;
-              diffEl.innerHTML = "<div class=\\"project-compare-diff-inner project-compare-diff-inner-compact\\"><div class=\\"project-compare-diff-warning\\">" + esc(msgU2) + "</div></div>";
-            }
-            runExplorerCompareSync();
-            return;
-          }
-          renderProjectComparePanel(diffEl, sourceRoot, payload);
-          runExplorerCompareSync();
-        }
-
-        function escAttr(s) {
-          return String(s || "")
-            .replace(/&/g, "&amp;")
-            .replace(/"/g, "&quot;")
-            .replace(/</g, "&lt;");
         }
 
         function formatRowLabel(s) {
@@ -2652,6 +2307,197 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           var findings = s && s.totalFindings != null ? s.totalFindings + " findings" : "— findings";
           var score = s && s.overallScore != null ? "score " + Number(s.overallScore).toFixed(1) : "score —";
           return dateStr + " · " + risk + " · " + findings + " · " + score;
+        }
+
+        var overviewCompareDetailModal = document.getElementById("overview-compare-detail-modal");
+        var overviewCompareDetailBody = document.getElementById("overview-compare-detail-body");
+
+        function getOverviewCompareT() {
+          var t = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.overview;
+          return t && typeof t === "object" ? t : {};
+        }
+        function ovLabel(key, fallback) {
+          var o = getOverviewCompareT();
+          var v = o[key];
+          return (v != null && v !== "") ? v : fallback;
+        }
+        function formatIssueLabelForCompare(issueKey) {
+          if (!issueKey) return "—";
+          var ti = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.issues;
+          if (ti && ti[issueKey]) return ti[issueKey];
+          return issueKey.replace(/_/g, " ");
+        }
+        function renderWorkspaceMetricRow(label, prev, cur, delta) {
+          var d = typeof delta === "number" && !isNaN(delta) ? formatSigned(delta) : "—";
+          return "<tr><td>" + esc(label) + "</td><td>" + esc(String(prev != null ? prev : "—")) + "</td><td>" + esc(String(cur != null ? cur : "—")) + "</td><td>" + esc(d) + "</td></tr>";
+        }
+        function renderOverviewCompareDetailHtml(payload) {
+          var colPrev = ovLabel("compareDetailColPrevious", "Baseline");
+          var colCur = ovLabel("compareDetailColCurrent", "Current");
+          var colDelta = ovLabel("compareDetailColDelta", "Delta");
+          if (!payload) {
+            return "<p class=\\"overview-compare-detail-empty\\">" + esc(ovLabel("compareDetailNoData", "No comparison data is available for this baseline.")) + "</p>";
+          }
+          var html = "";
+          var bs = payload.baselineSummary || {};
+          var baseDate = "—";
+          if (bs.generatedAt) {
+            try { baseDate = new Date(bs.generatedAt).toLocaleString(); } catch (eB) {}
+          }
+          html += "<section class=\\"overview-compare-detail-section\\"><h4 class=\\"overview-compare-detail-section-title\\">" + esc(ovLabel("compareDetailSectionBaseline", "Baseline snapshot")) + "</h4>";
+          html += "<p class=\\"overview-compare-detail-kv\\"><strong>" + esc(ovLabel("compareBaselineSnapshot", "Baseline snapshot: {date}").replace("{date}", baseDate)) + "</strong></p>";
+          if (bs.riskLevel != null) html += "<p class=\\"overview-compare-detail-kv\\">" + esc(ovLabel("workspaceRiskLabel", "Workspace risk")) + ": " + esc(String(bs.riskLevel)) + "</p>";
+          var trRoot = window.__TRANSLATIONS__ || {};
+          if (bs.totalFindings != null) {
+            html += "<p class=\\"overview-compare-detail-kv\\">" + esc(getNested(trRoot, "hero.warnings") || "Findings") + " (baseline): " + esc(String(bs.totalFindings)) + "</p>";
+          }
+          if (bs.overallScore != null) {
+            html += "<p class=\\"overview-compare-detail-kv\\">" + esc(getNested(trRoot, "scores.overallHealth") || "Overall") + " (baseline): " + esc(Number(bs.overallScore).toFixed(1)) + "</p>";
+          }
+          if (bs.runId || bs.snapshotHash) {
+            html += "<p class=\\"overview-compare-detail-muted\\">" + esc((bs.runId ? "Run: " + bs.runId : "") + (bs.snapshotHash ? (bs.runId ? " · " : "") + "Hash: " + String(bs.snapshotHash).slice(0, 12) + "…" : "")) + "</p>";
+          }
+          html += "</section>";
+
+          var ws = payload.workspace;
+          if (ws) {
+            html += "<section class=\\"overview-compare-detail-section\\"><h4 class=\\"overview-compare-detail-section-title\\">" + esc(ovLabel("compareDetailSectionWorkspace", "Workspace metrics")) + "</h4>";
+            html += "<div class=\\"overview-compare-detail-table-wrap\\"><table class=\\"overview-compare-detail-table\\"><thead><tr><th>Metric</th><th>" + esc(colPrev) + "</th><th>" + esc(colCur) + "</th><th>" + esc(colDelta) + "</th></tr></thead><tbody>";
+            var tf = ws.totalFindings;
+            if (tf) html += renderWorkspaceMetricRow("Total findings", tf.previous, tf.current, tf.delta);
+            var os = ws.overallScore;
+            if (os) html += renderWorkspaceMetricRow("Overall score", os.previous, os.current, os.delta);
+            var cs = ws.componentScore;
+            if (cs) html += renderWorkspaceMetricRow("Component score", cs.previous, cs.current, cs.delta);
+            var ls = ws.lifecycleScore;
+            if (ls) html += renderWorkspaceMetricRow("Lifecycle score", ls.previous, ls.current, ls.delta);
+            var ts = ws.templateScore;
+            if (ts) html += renderWorkspaceMetricRow("Template score", ts.previous, ts.current, ts.delta);
+            var rs = ws.responsibilityScore;
+            if (rs) html += renderWorkspaceMetricRow("Responsibility score", rs.previous, rs.current, rs.delta);
+            var cr = ws.criticalCount;
+            if (cr) html += renderWorkspaceMetricRow("Critical", cr.previous, cr.current, cr.delta);
+            var hi = ws.highCount;
+            if (hi) html += renderWorkspaceMetricRow("High", hi.previous, hi.current, hi.delta);
+            var wa = ws.warningSeverityCount;
+            if (wa) html += renderWorkspaceMetricRow("Warning", wa.previous, wa.current, wa.delta);
+            html += "</tbody></table></div>";
+            if (ws.riskLevel) {
+              html += "<p class=\\"overview-compare-detail-kv overview-compare-detail-muted\\">" + esc("Risk: " + String(ws.riskLevel.previous) + " → " + String(ws.riskLevel.current)) + "</p>";
+            }
+            html += "</section>";
+          }
+
+          var did = ws && ws.dominantIssueCountsDelta;
+          if (did && typeof did === "object") {
+            var didKeys = Object.keys(did).filter(function(k) { return did[k] !== 0; });
+            if (didKeys.length > 0) {
+              html += "<section class=\\"overview-compare-detail-section\\"><h4 class=\\"overview-compare-detail-section-title\\">" + esc(ovLabel("compareDetailSectionDominantIssues", "Dominant issue counts (delta)")) + "</h4>";
+              html += "<ul class=\\"overview-compare-detail-list\\">";
+              for (var di = 0; di < didKeys.length; di++) {
+                var dk = didKeys[di];
+                html += "<li>" + esc(formatIssueLabelForCompare(dk)) + ": " + esc(formatSigned(did[dk])) + "</li>";
+              }
+              html += "</ul></section>";
+            }
+          }
+
+          var rulesUp = payload.topRuleIncreasesWorkspace || [];
+          var rulesDown = payload.topRuleDecreasesWorkspace || [];
+          var ruleColRule = ovLabel("compareDetailRuleLabel", "Rule");
+          if (rulesUp.length > 0) {
+            html += "<section class=\\"overview-compare-detail-section\\"><h4 class=\\"overview-compare-detail-section-title\\">" + esc(ovLabel("compareDetailSectionRulesIncreased", "Rules with more findings")) + "</h4>";
+            html += "<div class=\\"overview-compare-detail-table-wrap\\"><table class=\\"overview-compare-detail-table\\"><thead><tr><th>" + esc(ruleColRule) + "</th><th>" + esc(colPrev) + "</th><th>" + esc(colCur) + "</th><th>" + esc(colDelta) + "</th></tr></thead><tbody>";
+            for (var ri = 0; ri < Math.min(rulesUp.length, 12); ri++) {
+              var ru = rulesUp[ri];
+              if (!ru) continue;
+              html += "<tr><td>" + esc(resolveRuleTitle(ru.ruleId)) + "</td><td>" + esc(String(ru.previousCount)) + "</td><td>" + esc(String(ru.currentCount)) + "</td><td>" + esc(formatSigned(ru.delta)) + "</td></tr>";
+            }
+            html += "</tbody></table></div></section>";
+          }
+          if (rulesDown.length > 0) {
+            html += "<section class=\\"overview-compare-detail-section\\"><h4 class=\\"overview-compare-detail-section-title\\">" + esc(ovLabel("compareDetailSectionRulesDecreased", "Rules with fewer findings")) + "</h4>";
+            html += "<div class=\\"overview-compare-detail-table-wrap\\"><table class=\\"overview-compare-detail-table\\"><thead><tr><th>" + esc(ruleColRule) + "</th><th>" + esc(colPrev) + "</th><th>" + esc(colCur) + "</th><th>" + esc(colDelta) + "</th></tr></thead><tbody>";
+            for (var rd = 0; rd < Math.min(rulesDown.length, 12); rd++) {
+              var rdw = rulesDown[rd];
+              if (!rdw) continue;
+              html += "<tr><td>" + esc(resolveRuleTitle(rdw.ruleId)) + "</td><td>" + esc(String(rdw.previousCount)) + "</td><td>" + esc(String(rdw.currentCount)) + "</td><td>" + esc(formatSigned(rdw.delta)) + "</td></tr>";
+            }
+            html += "</tbody></table></div></section>";
+          }
+
+          var pc = payload.projectComparisons || {};
+          var pKeys = Object.keys(pc);
+          if (pKeys.length > 0) {
+            html += "<section class=\\"overview-compare-detail-section\\"><h4 class=\\"overview-compare-detail-section-title\\">" + esc(ovLabel("compareDetailSectionProjects", "By project")) + "</h4>";
+            var fnShort = window.__formatProjectShortName__ || function(x) { return x || ""; };
+            pKeys.sort();
+            for (var pi = 0; pi < pKeys.length; pi++) {
+              var pk = pKeys[pi];
+              var proj = pc[pk];
+              if (!proj) continue;
+              html += "<div class=\\"overview-compare-detail-project\\">";
+              html += "<div class=\\"overview-compare-detail-project-title\\">" + esc(fnShort(pk) || pk) + "</div>";
+              var cntTpl = ovLabel("compareDetailProjectCounts", "Worsened {w} · Improved {i} · Resolved {r} · New {n} · Issue changed {c}");
+              var cntLine = cntTpl
+                .replace("{w}", String(proj.worsenedCount != null ? proj.worsenedCount : 0))
+                .replace("{i}", String(proj.improvedCount != null ? proj.improvedCount : 0))
+                .replace("{r}", String(proj.resolvedCount != null ? proj.resolvedCount : 0))
+                .replace("{n}", String(proj.newlyFlaggedCount != null ? proj.newlyFlaggedCount : 0))
+                .replace("{c}", String(proj.issueChangedCount != null ? proj.issueChangedCount : 0));
+              html += "<p class=\\"overview-compare-detail-muted\\">" + esc(cntLine) + "</p>";
+              var sd = proj.summaryDeltas;
+              if (sd) {
+                html += "<p class=\\"overview-compare-detail-muted\\">" + esc(
+                  "Components " + formatSigned(sd.components) + " · With findings " + formatSigned(sd.componentsWithFindings) + " · Component findings " + formatSigned(sd.componentFindings)
+                ) + "</p>";
+              }
+              var tw = proj.topWorsenedComponents || [];
+              var ti = proj.topImprovedComponents || [];
+              if (tw.length > 0) {
+                html += "<p class=\\"overview-compare-detail-muted\\" style=\\"margin-top:8px;font-weight:600;color:var(--color-text);\\">" + esc(ovLabel("compareDetailTopWorsened", "Most worsened components")) + "</p><ul class=\\"overview-compare-detail-list\\">";
+                for (var wi = 0; wi < Math.min(tw.length, 5); wi++) {
+                  var wrow = tw[wi];
+                  if (!wrow) continue;
+                  var wlab = (wrow.className || (wrow.filePath && wrow.filePath.split(/[/\\\\]/).pop()) || "—");
+                  html += "<li>" + esc(wlab) + " — " + esc(wrow.changeType || "") + " (" + esc(String(wrow.previousWarningCount)) + " → " + esc(String(wrow.currentWarningCount)) + ")</li>";
+                }
+                html += "</ul>";
+              }
+              if (ti.length > 0) {
+                html += "<p class=\\"overview-compare-detail-muted\\" style=\\"margin-top:8px;font-weight:600;color:var(--color-text);\\">" + esc(ovLabel("compareDetailTopImproved", "Most improved components")) + "</p><ul class=\\"overview-compare-detail-list\\">";
+                for (var ii = 0; ii < Math.min(ti.length, 5); ii++) {
+                  var irow = ti[ii];
+                  if (!irow) continue;
+                  var ilab = (irow.className || (irow.filePath && irow.filePath.split(/[/\\\\]/).pop()) || "—");
+                  html += "<li>" + esc(ilab) + " — " + esc(irow.changeType || "") + " (" + esc(String(irow.previousWarningCount)) + " → " + esc(String(irow.currentWarningCount)) + ")</li>";
+                }
+                html += "</ul>";
+              }
+              html += "</div>";
+            }
+            html += "</section>";
+          }
+
+          return html || ("<p class=\\"overview-compare-detail-empty\\">" + esc(ovLabel("compareDetailNoData", "No comparison data is available for this baseline.")) + "</p>");
+        }
+
+        function openOverviewCompareDetailModal() {
+          if (!overviewCompareDetailModal || !overviewCompareDetailBody) return;
+          var idx = window.__overviewCompareHistoryIndex__;
+          if (idx == null || idx === undefined) return;
+          var key = baselineKeyFromIndex(idx);
+          var payload = key ? getComparisons()[key] : null;
+          overviewCompareDetailBody.innerHTML = renderOverviewCompareDetailHtml(payload);
+          overviewCompareDetailModal.removeAttribute("hidden");
+          overviewCompareDetailModal.setAttribute("aria-hidden", "false");
+        }
+
+        function closeOverviewCompareDetailModal() {
+          if (!overviewCompareDetailModal) return;
+          overviewCompareDetailModal.setAttribute("hidden", "hidden");
+          overviewCompareDetailModal.setAttribute("aria-hidden", "true");
+          if (overviewCompareDetailBody) overviewCompareDetailBody.innerHTML = "";
         }
 
         function renderPickerList() {
@@ -2666,46 +2512,8 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           }).join("");
         }
 
-        function renderBaselineStatus(el, sourceRoot) {
-          if (!el) return;
-          var idx = baselineBySourceRoot[sourceRoot];
-          if (idx == null || idx === undefined) {
-            el.hidden = true;
-            el.innerHTML = "";
-            clearProjectComparePanel(findDiffEl(sourceRoot));
-            runExplorerCompareSync();
-            syncCompareActiveCardHighlight();
-            return;
-          }
-          var hist = getHistory();
-          var s = hist[idx];
-          var dateStr = "—";
-          if (s && s.generatedAt) {
-            try { dateStr = new Date(s.generatedAt).toLocaleString(); } catch (e2) { dateStr = "—"; }
-          }
-          var tCompB = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
-          var snapTplB = (tCompB && tCompB.explorerBaselineSnapshotLabel) || "Baseline snapshot: {date}";
-          var label = snapTplB.replace("{date}", dateStr);
-          var lblChg = (tCompB && tCompB.explorerBaselineCardChange) || (tCompB && tCompB.explorerChangeBaseline) || "Change baseline";
-          var lblClr = (tCompB && tCompB.explorerBaselineCardClear) || "Clear";
-          el.hidden = false;
-          el.innerHTML =
-            "<span class=\\"project-compare-status-line\\">" + esc(label) + "</span>" +
-            "<span class=\\"project-compare-inline-actions\\">" +
-            "<button type=\\"button\\" class=\\"project-compare-change\\" data-source-root=\\"" + escAttr(sourceRoot) + "\\">" +
-            esc(lblChg) +
-            "</button>" +
-            "<button type=\\"button\\" class=\\"project-compare-clear\\" data-source-root=\\"" + escAttr(sourceRoot) + "\\">" +
-            esc(lblClr) +
-            "</button>" +
-            "</span>";
-          syncComparePanel(sourceRoot);
-          syncCompareActiveCardHighlight();
-        }
-
-        function openModal(sourceRoot) {
-          closeProjectCompareDetailModal();
-          pickerSourceRoot = sourceRoot || "";
+        function openModal(target) {
+          pickerTarget = target === "overview" ? "overview" : "components";
           if (!modal) return;
           renderPickerList();
           modal.removeAttribute("hidden");
@@ -2713,34 +2521,55 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         }
 
         function closeModal() {
+          pickerTarget = null;
           if (!modal) return;
           modal.setAttribute("hidden", "hidden");
           modal.setAttribute("aria-hidden", "true");
-          pickerSourceRoot = null;
         }
 
         document.body.addEventListener("click", function(e) {
-          var detailCloseEl = e.target && e.target.closest ? e.target.closest("[data-project-compare-detail-close]") : null;
+          var detailCloseEl = e.target && e.target.closest ? e.target.closest("[data-overview-compare-detail-close]") : null;
           if (detailCloseEl) {
             e.preventDefault();
             e.stopPropagation();
-            closeProjectCompareDetailModal();
+            closeOverviewCompareDetailModal();
             return;
           }
-          var compareBtn = e.target && e.target.closest ? e.target.closest(".project-compare-btn") : null;
-          if (compareBtn) {
+          var detailOpenBtn = e.target && e.target.closest ? e.target.closest("[data-overview-compare-details-open]") : null;
+          var detailSummaryOpen = e.target && e.target.closest ? e.target.closest("[data-overview-compare-summary-open]") : null;
+          if (detailOpenBtn || detailSummaryOpen) {
             e.preventDefault();
             e.stopPropagation();
-            var sr = compareBtn.getAttribute("data-source-root") || "";
-            openModal(sr);
+            openOverviewCompareDetailModal();
             return;
           }
-          var toggleDetailsBtn = e.target && e.target.closest ? e.target.closest("[data-project-compare-toggle-details]") : null;
-          if (toggleDetailsBtn) {
+          var ovOpen = e.target && e.target.closest ? e.target.closest("[data-overview-compare-open]") : null;
+          if (ovOpen) {
             e.preventDefault();
             e.stopPropagation();
-            var srTd = toggleDetailsBtn.getAttribute("data-source-root") || "";
-            openProjectCompareDetailModal(srTd);
+            openModal("overview");
+            return;
+          }
+          var ovCh = e.target && e.target.closest ? e.target.closest("[data-overview-compare-change]") : null;
+          if (ovCh) {
+            e.preventDefault();
+            e.stopPropagation();
+            openModal("overview");
+            return;
+          }
+          var ovCl = e.target && e.target.closest ? e.target.closest("[data-overview-compare-clear]") : null;
+          if (ovCl) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.__overviewCompareHistoryIndex__ = null;
+            updateOverviewComparePanel();
+            return;
+          }
+          var compOpen = e.target && e.target.closest ? e.target.closest("[data-components-compare-open]") : null;
+          if (compOpen) {
+            e.preventDefault();
+            e.stopPropagation();
+            openModal("components");
             return;
           }
           var closeEl = e.target && e.target.closest ? e.target.closest("[data-snapshot-compare-close]") : null;
@@ -2754,52 +2583,38 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           if (row && modal && !modal.hasAttribute("hidden")) {
             e.preventDefault();
             e.stopPropagation();
-            var idx = parseInt(row.getAttribute("data-snapshot-index") || "-1", 10);
-            if (idx >= 0 && pickerSourceRoot != null && pickerSourceRoot !== undefined) {
-              baselineBySourceRoot[pickerSourceRoot] = idx;
-              window.__activeCompareContext__ = { sourceRoot: pickerSourceRoot, historyIndex: idx };
-              var projInput = document.getElementById("filter-project");
-              if (projInput) projInput.value = pickerSourceRoot;
-              var st = findStatusEl(pickerSourceRoot);
-              if (st) renderBaselineStatus(st, pickerSourceRoot);
+            var idxPick = parseInt(row.getAttribute("data-snapshot-index") || "-1", 10);
+            if (idxPick >= 0 && pickerTarget) {
+              if (pickerTarget === "overview") {
+                window.__overviewCompareHistoryIndex__ = idxPick;
+                updateOverviewComparePanel();
+              } else {
+                window.__componentsCompareHistoryIndex__ = idxPick;
+                runExplorerCompareSync();
+                updateComponentsCompareEntry();
+              }
               closeModal();
-            }
-            return;
-          }
-          var changeB = e.target && e.target.closest ? e.target.closest(".project-compare-change") : null;
-          if (changeB) {
-            e.preventDefault();
-            e.stopPropagation();
-            var srCh = changeB.getAttribute("data-source-root") || "";
-            openModal(srCh);
-            return;
-          }
-          var clearB = e.target && e.target.closest ? e.target.closest(".project-compare-clear") : null;
-          if (clearB) {
-            e.preventDefault();
-            e.stopPropagation();
-            var srCl = clearB.getAttribute("data-source-root") || "";
-            delete baselineBySourceRoot[srCl];
-            var ctxCl = window.__activeCompareContext__;
-            if (ctxCl && ctxCl.sourceRoot === srCl) window.__activeCompareContext__ = null;
-            if (typeof window.__ensureActiveCompareContext__ === "function") window.__ensureActiveCompareContext__();
-            closeProjectCompareDetailModal();
-            var stCl = findStatusEl(srCl);
-            if (stCl) renderBaselineStatus(stCl, srCl);
-            else {
-              clearProjectComparePanel(findDiffEl(srCl));
-              runExplorerCompareSync();
             }
             return;
           }
         });
 
         document.addEventListener("keydown", function(e) {
+          if (e.key === "Enter" || e.key === " ") {
+            var sumEl = e.target && e.target.closest ? e.target.closest("[data-overview-compare-summary-open]") : null;
+            if (sumEl) {
+              var act = document.querySelector("[data-overview-compare-active]");
+              if (act && !act.hidden && act.contains(sumEl)) {
+                e.preventDefault();
+                openOverviewCompareDetailModal();
+                return;
+              }
+            }
+          }
           if (e.key !== "Escape") return;
-          var dmEsc = document.getElementById("project-compare-detail-modal");
-          if (dmEsc && !dmEsc.hasAttribute("hidden")) {
+          if (overviewCompareDetailModal && !overviewCompareDetailModal.hasAttribute("hidden")) {
             e.preventDefault();
-            closeProjectCompareDetailModal();
+            closeOverviewCompareDetailModal();
             return;
           }
           if (!modal || modal.hasAttribute("hidden")) return;
@@ -2811,34 +2626,22 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         if (explorerBaselineClear) {
           explorerBaselineClear.addEventListener("click", function(ev) {
             ev.preventDefault();
-            closeProjectCompareDetailModal();
-            window.__activeCompareContext__ = null;
-            var baselineMapGlobal = window.__baselineBySourceRoot__ || {};
-            for (var kbc in baselineMapGlobal) {
-              if (Object.prototype.hasOwnProperty.call(baselineMapGlobal, kbc)) delete baselineMapGlobal[kbc];
-            }
-            var statusNodes = document.querySelectorAll("[data-project-compare-status]");
-            for (var si = 0; si < statusNodes.length; si++) {
-              var stN = statusNodes[si];
-              stN.hidden = true;
-              stN.innerHTML = "";
-              var srN = stN.getAttribute("data-source-root");
-              if (srN) clearProjectComparePanel(findDiffEl(srN));
-            }
+            window.__componentsCompareHistoryIndex__ = null;
             runExplorerCompareSync();
+            updateComponentsCompareEntry();
           });
         }
         var explorerBaselineChange = document.getElementById("components-explorer-baseline-change");
         if (explorerBaselineChange) {
           explorerBaselineChange.addEventListener("click", function(ev) {
             ev.preventDefault();
-            var ctx = window.__activeCompareContext__;
-            var srChBar = ctx && ctx.sourceRoot ? ctx.sourceRoot : "";
-            openModal(srChBar);
+            openModal("components");
           });
         }
-        window.__openSnapshotCompareModalForSourceRoot = function(sr) {
-          openModal(sr || "");
+        window.__openSnapshotCompareModalForSourceRoot = function() {
+          openModal("components");
         };
+        updateOverviewComparePanel();
+        updateComponentsCompareEntry();
       })();
     })();`;
