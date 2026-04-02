@@ -1,6 +1,6 @@
 {
   "name": "@modulens/angular",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Architecture, structure, and quality analysis CLI for Angular workspaces. Scans projects, detects risks, and generates HTML reports.",
   "bin": {
     "modulens": "dist/cli/index.js"
