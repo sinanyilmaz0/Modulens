@@ -78,7 +78,7 @@ export function matchesExplorerCompareFilter(
   }
 }
 
-/** Last-selected project + history index when user picks a baseline on a project card (mirrors `window.__activeCompareContext__`). */
+/** @deprecated Legacy client shape; HTML report uses `__overviewCompareHistoryIndex__` / `__componentsCompareHistoryIndex__`. */
 export type ActiveCompareContext = {
   sourceRoot: string;
   historyIndex: number;
@@ -86,18 +86,16 @@ export type ActiveCompareContext = {
 
 /**
  * Components Explorer row state derived from DOM (`data-source-root`, `data-compare-impact`, `data-compare-kind`).
- * Compare mode is **project-scoped**: when a baseline is active, only the active project’s rows participate; compare
- * filters then narrow within that project.
- *
- * - `compareFilter === "all"` → all components in the **active** project (not workspace-wide).
- * - Other filters → only rows in the active project that match the diff kind; rows without baseline payload are hidden.
+ * With a Components baseline, compare filters apply per row using that row’s project slice (`projectComparisons[sourceRoot]`).
+ * Pass `activeSourceRoot: null` for workspace-wide compare (any row with payload); or a single project to mirror legacy single-project scope.
  *
  * Keep in sync with `matchCompareFilter` in `report-client-script.ts`.
  */
 export function rowMatchesExplorerCompareScope(input: {
   compareFilter: ExplorerCompareFilter;
-  /** `filter-compare-diff` is enabled (at least one baseline on a project card). */
+  /** `filter-compare-diff` is enabled (Components baseline selected). */
   compareDropdownEnabled: boolean;
+  /** When set, only this source root; `null` = workspace-wide (each row uses its own `itemSourceRoot`). */
   activeSourceRoot: string | null;
   itemSourceRoot: string;
   hasBaselinePayload: boolean;
@@ -105,8 +103,7 @@ export function rowMatchesExplorerCompareScope(input: {
   compareKind: string;
 }): boolean {
   if (!input.compareDropdownEnabled) return true;
-  if (!input.activeSourceRoot) return true;
-  if (input.itemSourceRoot !== input.activeSourceRoot) return false;
+  if (input.activeSourceRoot && input.itemSourceRoot !== input.activeSourceRoot) return false;
   if (input.compareFilter === "all") return true;
   if (!input.hasBaselinePayload) return false;
   if (input.compareFilter === "changed-only") return input.hasDiff;

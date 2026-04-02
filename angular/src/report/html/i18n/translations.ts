@@ -155,6 +155,35 @@ export interface Translations {
     recommendedActions?: string;
     recommendedActionsHelper?: string;
     recommendedActionsEmpty?: string;
+    /** Workspace-level compare panel (Overview) */
+    compareSectionTitle?: string;
+    compareReportCta?: string;
+    compareChangeBaseline?: string;
+    compareClearCompare?: string;
+    compareBaselineSnapshot?: string;
+    compareWorkspaceFindingsDelta?: string;
+    compareWorkspaceScoreDelta?: string;
+    compareWorkspaceSeverityDelta?: string;
+    compareTopChangedArea?: string;
+    compareDetailModalTitle?: string;
+    compareDetailViewDetailsBtn?: string;
+    compareDetailClose?: string;
+    compareDetailNoData?: string;
+    compareDetailSectionBaseline?: string;
+    compareDetailSectionWorkspace?: string;
+    compareDetailSectionDominantIssues?: string;
+    compareDetailSectionRulesIncreased?: string;
+    compareDetailSectionRulesDecreased?: string;
+    compareDetailSectionProjects?: string;
+    compareDetailColPrevious?: string;
+    compareDetailColCurrent?: string;
+    compareDetailColDelta?: string;
+    compareDetailProjectCounts?: string;
+    compareDetailTopWorsened?: string;
+    compareDetailTopImproved?: string;
+    compareDetailRuleLabel?: string;
+    compareDetailComponent?: string;
+    compareDetailChange?: string;
   };
   hero: {
     workspaceHealth: string;
@@ -386,8 +415,13 @@ export interface Translations {
     compareNew?: string;
     compareIssueChanged?: string;
     compareFilterHelper?: string;
-    /** Tooltip when compare filter is disabled (no baseline selected on any project card). */
+    /** Tooltip when compare filter is disabled (no baseline selected for Components compare). */
     compareFilterDisabledHint?: string;
+    /** Snapshot picker modal (shared Overview + Components) */
+    snapshotCompareModalTitle?: string;
+    snapshotCompareModalHelper?: string;
+    /** Components page: enable compare CTA when compare is off */
+    componentsCompareCta?: string;
     /** Project card: embedded compare payload missing for chosen baseline. */
     projectCompareUnavailable?: string;
     /** Project card: no diff entries for this project vs baseline. */
@@ -813,6 +847,8 @@ export interface Translations {
     /** Overview project card compare row — same actions as Components bar, compact */
     explorerBaselineCardChange?: string;
     explorerBaselineCardClear?: string;
+    /** Baseline bar first line when comparing workspace-wide */
+    explorerBaselineWorkspaceLine?: string;
   };
   severityHint?: {
     critical: string;

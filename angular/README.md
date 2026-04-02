@@ -113,9 +113,13 @@ On every successful `modulens scan`, Modulens writes an additional JSON file und
 
 The file name looks like `snapshot-YYYY-MM-DDTHH-mm-ss-<shortid>.json` (filesystem-safe timestamp plus a short id derived from the run metadata). The content matches the public JSON export (`JsonFormatter`), i.e. the same analysis snapshot as the HTML or primary JSON report. If the snapshot cannot be written (for example permissions), the CLI prints a warning but does not fail the scan solely for that reason when the main report was written successfully.
 
-The **HTML report** reads compatible snapshots from that folder (same workspace path in metadata, newest first) and embeds a short history for the UI. On overview **workspace breakdown** cards, **Compare with previous snapshot** opens a picker; the comparison is always **this run vs the stored snapshot you select**. Modulens precomputes a compact compare summary per history entry when the HTML is built (no browser disk access). Project cards then show deltas, top changes, and rule shifts for the selected baseline. If a file cannot be compared, you may see a short unavailable notice.
+The **HTML report** reads compatible snapshots from that folder (same workspace path in metadata, newest first) and embeds a short history for the UI. Modulens precomputes a compact compare payload per history entry when the HTML is built (no browser disk access).
 
-On **Components**, compare is **project-scoped**: the explorer follows the **active compare project** (the project whose baseline you selected last). **Compare vs baseline** filters apply **within that project**—for example, “Worse” shows only components that worsened in that project, and “All (compare)” lists all components in that project. The baseline bar at the top of the Components page names the active project, baseline snapshot time, a short delta summary, and actions to change the baseline or clear compare. Overview project cards still hold **Compare with previous snapshot**, compact per-project metrics, and an expandable compare details panel.
+On **Overview**, use the **Compare** section to pick a baseline for **workspace-level** deltas (findings, scores, severity counts, and a short “largest shift” note by area). This choice is **only for the overview summary**; it does not enable compare on the Components page.
+
+**Workspace breakdown** cards (projects or feature areas) are **informational**—component counts, findings, and primary pressure—without compare controls.
+
+On **Components**, choose **Compare components with a previous snapshot** when you want diff badges, the baseline bar, and **Compare vs baseline** filters. That selection is **separate** from Overview compare. Filters apply to components in the workspace using the precomputed per–source-root slice for the baseline you picked.
 
 ---
 

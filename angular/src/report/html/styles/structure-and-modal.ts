@@ -36,11 +36,14 @@ export const REPORT_STYLES_STRUCTURE_AND_MODAL = `
   padding: 24px;
   opacity: 0;
   visibility: hidden;
+  /* Closed overlay must not sit above the report or clicks never reach [data-file-path] / nav. */
+  pointer-events: none;
   transition: opacity 0.2s, visibility 0.2s;
 }
 .detail-modal-overlay.open {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
 }
 .detail-modal {
   width: 100%;
