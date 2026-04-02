@@ -191,6 +191,11 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         detailModalOverlay.setAttribute("aria-hidden", "false");
         document.body.style.overflow = "hidden";
       }
+      function refreshComponentDetailModalIfOpen() {
+        if (!currentDetail || currentDetail.type !== "component") return;
+        if (!detailModalOverlay || !detailModalOverlay.classList.contains("open")) return;
+        renderDetailModal();
+      }
 
       document.addEventListener("click", function(e) {
         var btn = e.target && e.target.closest ? e.target.closest(".pattern-explore-btn") : null;
@@ -404,7 +409,260 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
       const paginationPrev = document.getElementById("pagination-prev");
       const paginationNext = document.getElementById("pagination-next");
       const paginationPages = document.getElementById("pagination-pages");
+      const compareSelect = document.getElementById("filter-compare-diff");
       var currentPage = 0;
+
+      function getSnapshotComparisons() {
+        if (typeof window.__SNAPSHOT_COMPARISONS__ === "object" && window.__SNAPSHOT_COMPARISONS__ !== null) {
+          return window.__SNAPSHOT_COMPARISONS__;
+        }
+        return {};
+      }
+      function baselineKeyFromHistoryIndex(idx) {
+        var hist = Array.isArray(window.__SNAPSHOT_HISTORY__) ? window.__SNAPSHOT_HISTORY__ : [];
+        var s = hist[idx];
+        if (!s) return null;
+        if (s.snapshotHash) return s.snapshotHash;
+        if (s.runId) return s.runId;
+        return null;
+      }
+      function compareImpactScoreJs(ch) {
+        var rank = { worsened: 100, newlyFlagged: 90, issueChanged: 70, improved: 50, resolved: 30, unchanged: 0 };
+        var base = rank[ch.changeType] != null ? rank[ch.changeType] : 0;
+        var dw = Math.abs((ch.currentWarningCount || 0) - (ch.previousWarningCount || 0));
+        return base * 1000 + dw;
+      }
+      function badgeKindFromChangeType(ct) {
+        if (ct === "newlyFlagged") return "new";
+        if (ct === "resolved") return "resolved";
+        if (ct === "worsened") return "worse";
+        if (ct === "improved") return "better";
+        if (ct === "issueChanged") return "changed";
+        return null;
+      }
+      if (typeof window.__activeCompareContext__ === "undefined") window.__activeCompareContext__ = null;
+      function formatProjectShortName(sourceRoot) {
+        if (!sourceRoot) return "";
+        var s = String(sourceRoot);
+        var t = s;
+        if (t.indexOf("projects/") === 0) t = t.slice(9);
+        else if (t.indexOf("libs/") === 0) t = t.slice(5);
+        else if (t.indexOf("apps/") === 0) t = t.slice(5);
+        if (t.length > 4 && t.slice(-4) === "/src") t = t.slice(0, -4);
+        return t || s;
+      }
+      window.__formatProjectShortName__ = formatProjectShortName;
+      function ensureActiveCompareContext() {
+        var baselineMap = window.__baselineBySourceRoot__ || {};
+        var keys = [];
+        for (var k in baselineMap) {
+          if (Object.prototype.hasOwnProperty.call(baselineMap, k) && baselineMap[k] != null && baselineMap[k] !== undefined) keys.push(k);
+        }
+        keys.sort();
+        if (keys.length === 0) {
+          window.__activeCompareContext__ = null;
+          return;
+        }
+        var cur = window.__activeCompareContext__;
+        if (cur && keys.indexOf(cur.sourceRoot) >= 0) return;
+        window.__activeCompareContext__ = { sourceRoot: keys[0], historyIndex: baselineMap[keys[0]] };
+      }
+      window.__ensureActiveCompareContext__ = ensureActiveCompareContext;
+      function getActiveCompareSourceRoot() {
+        var ctx = window.__activeCompareContext__;
+        return ctx && ctx.sourceRoot ? ctx.sourceRoot : null;
+      }
+      function findProjectCardEl(sourceRoot) {
+        if (!sourceRoot) return null;
+        var nodes = document.querySelectorAll("[data-project-card-source]");
+        for (var i = 0; i < nodes.length; i++) {
+          if (nodes[i].getAttribute("data-project-card-source") === sourceRoot) return nodes[i];
+        }
+        return null;
+      }
+      function getProjectDisplayNameFromCard(sourceRoot) {
+        var card = findProjectCardEl(sourceRoot);
+        if (!card) return null;
+        var nameEl = card.querySelector(".project-name");
+        if (!nameEl) return null;
+        var text = (nameEl.textContent || "").trim();
+        return text || null;
+      }
+      function syncCompareActiveCardHighlight() {
+        var cards = document.querySelectorAll(".project-breakdown-card[data-project-card-source]");
+        for (var ci = 0; ci < cards.length; ci++) {
+          cards[ci].classList.remove("project-breakdown-card--compare-active");
+        }
+        ensureActiveCompareContext();
+        var activeSr = getActiveCompareSourceRoot();
+        if (!activeSr) return;
+        var bm = window.__baselineBySourceRoot__ || {};
+        if (bm[activeSr] == null || bm[activeSr] === undefined) return;
+        var activeCard = findProjectCardEl(activeSr);
+        if (activeCard) activeCard.classList.add("project-breakdown-card--compare-active");
+      }
+      function updateCompareFilterControlState() {
+        var el = document.getElementById("filter-compare-diff");
+        if (!el) return;
+        var baselineMap = window.__baselineBySourceRoot__ || {};
+        var any = false;
+        for (var k in baselineMap) {
+          if (Object.prototype.hasOwnProperty.call(baselineMap, k) && baselineMap[k] != null && baselineMap[k] !== undefined) {
+            any = true;
+            break;
+          }
+        }
+        el.disabled = !any;
+        if (!any) el.value = "all";
+        var tFil = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
+        var hintOn = (tFil && tFil.compareFilterHelper) || "";
+        var hintOff = (tFil && tFil.compareFilterDisabledHint) || "Choose a baseline from a project card first.";
+        var baseLbl = (tFil && tFil.compareBaseline) || "Compare vs baseline";
+        el.title = any ? hintOn : hintOff;
+        el.setAttribute("aria-label", any ? baseLbl + (hintOn ? ". " + hintOn : "") : hintOff);
+      }
+      function updateExplorerBaselineBar() {
+        var bar = document.getElementById("components-explorer-baseline-bar");
+        var projectLine = document.getElementById("components-explorer-baseline-project-line");
+        var snapshotLine = document.getElementById("components-explorer-baseline-snapshot-line");
+        var summaryEl = document.getElementById("components-explorer-baseline-summary");
+        var legacyText = document.getElementById("components-explorer-baseline-legacy-text");
+        var clearBtn = document.getElementById("components-explorer-baseline-clear");
+        var changeBtn = document.getElementById("components-explorer-baseline-change");
+        if (!bar) return;
+        ensureActiveCompareContext();
+        var baselineMap = window.__baselineBySourceRoot__ || {};
+        var hist = Array.isArray(window.__SNAPSHOT_HISTORY__) ? window.__SNAPSHOT_HISTORY__ : [];
+        var anyBaseline = false;
+        for (var kb in baselineMap) {
+          if (Object.prototype.hasOwnProperty.call(baselineMap, kb) && baselineMap[kb] != null && baselineMap[kb] !== undefined) {
+            anyBaseline = true;
+            break;
+          }
+        }
+        if (!anyBaseline) {
+          bar.hidden = true;
+          bar.classList.remove("components-explorer-baseline-bar--active");
+          if (clearBtn) clearBtn.hidden = true;
+          if (changeBtn) changeBtn.hidden = true;
+          if (projectLine) projectLine.textContent = "";
+          if (snapshotLine) snapshotLine.textContent = "";
+          if (summaryEl) summaryEl.textContent = "";
+          if (legacyText) legacyText.textContent = "";
+          syncCompareActiveCardHighlight();
+          return;
+        }
+        var activeSr = getActiveCompareSourceRoot();
+        if (!activeSr) {
+          bar.hidden = true;
+          bar.classList.remove("components-explorer-baseline-bar--active");
+          if (clearBtn) clearBtn.hidden = true;
+          if (changeBtn) changeBtn.hidden = true;
+          syncCompareActiveCardHighlight();
+          return;
+        }
+        var idxBar = baselineMap[activeSr];
+        var snap = idxBar != null && idxBar !== undefined ? hist[idxBar] : null;
+        var dateStr = "—";
+        if (snap && snap.generatedAt) {
+          try { dateStr = new Date(snap.generatedAt).toLocaleString(); } catch (eBar) {}
+        }
+        var tComp = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
+        var projTpl = (tComp && tComp.explorerBaselineComparingProject) || "Comparing project: {project}";
+        var snapTpl = (tComp && tComp.explorerBaselineSnapshotLabel) || "Baseline snapshot: {date}";
+        var sumTpl = (tComp && tComp.explorerBaselineSummaryShort) || "{resolved} resolved · {worsened} worsened · {improved} improved";
+        var displayName = getProjectDisplayNameFromCard(activeSr) || formatProjectShortName(activeSr);
+        if (projectLine) {
+          var pt = projectLine.getAttribute("data-template-project") || projTpl;
+          projectLine.textContent = pt.replace("{project}", displayName);
+        }
+        if (snapshotLine) {
+          var st = snapshotLine.getAttribute("data-template-snapshot") || snapTpl;
+          snapshotLine.textContent = st.replace("{date}", dateStr);
+        }
+        var compsB = getSnapshotComparisons();
+        var bkeyB = idxBar != null && idxBar !== undefined ? baselineKeyFromHistoryIndex(idxBar) : null;
+        var payloadB = bkeyB ? compsB[bkeyB] : null;
+        var pcB = payloadB && payloadB.projectComparisons ? payloadB.projectComparisons[activeSr] : null;
+        if (summaryEl) {
+          if (pcB) {
+            summaryEl.textContent = sumTpl
+              .replace("{resolved}", String(pcB.resolvedCount != null ? pcB.resolvedCount : 0))
+              .replace("{worsened}", String(pcB.worsenedCount != null ? pcB.worsenedCount : 0))
+              .replace("{improved}", String(pcB.improvedCount != null ? pcB.improvedCount : 0));
+          } else {
+            summaryEl.textContent = (window.__TRANSLATIONS__ && window.__TRANSLATIONS__.empty && window.__TRANSLATIONS__.empty.noCompareDataForBaseline) || "";
+          }
+        }
+        if (legacyText) {
+          legacyText.textContent = "";
+          legacyText.hidden = true;
+        }
+        bar.hidden = false;
+        bar.classList.add("components-explorer-baseline-bar--active");
+        if (clearBtn) clearBtn.hidden = false;
+        if (changeBtn) changeBtn.hidden = false;
+        syncCompareActiveCardHighlight();
+      }
+
+      function syncExplorerCompare() {
+        var listWrap = document.getElementById("components-explorer-list-wrap");
+        if (!listWrap) return;
+        var rows = listWrap.querySelectorAll(".component-explorer-row");
+        var comps = getSnapshotComparisons();
+        var baselineMap = window.__baselineBySourceRoot__ || {};
+        var tComp = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
+        var lbl = {
+          new: (tComp && tComp.compareBadgeNew) || "New",
+          resolved: (tComp && tComp.compareBadgeResolved) || "Resolved",
+          worse: (tComp && tComp.compareBadgeWorse) || "Worse",
+          better: (tComp && tComp.compareBadgeBetter) || "Better",
+          changed: (tComp && tComp.compareBadgeChanged) || "Changed"
+        };
+        for (var i = 0; i < rows.length; i++) {
+          var row = rows[i];
+          var slot = row.querySelector("[data-compare-badges-slot]");
+          var sr = row.getAttribute("data-source-root") || row.getAttribute("data-project") || "";
+          var ck = row.getAttribute("data-component-key") || "";
+          var idx = baselineMap[sr];
+          var bkey = idx != null && idx !== undefined ? baselineKeyFromHistoryIndex(idx) : null;
+          var payload = bkey ? comps[bkey] : null;
+          var pc = payload && payload.projectComparisons ? payload.projectComparisons[sr] : null;
+          var diff = pc && pc.componentChangesByKey && ck ? pc.componentChangesByKey[ck] : null;
+          if (slot) {
+            if (!diff) {
+              slot.innerHTML = "";
+            } else {
+              var kind = badgeKindFromChangeType(diff.changeType);
+              var text = kind ? lbl[kind] : "";
+              if (kind) {
+                slot.innerHTML = "<span class=\\"explorer-compare-badge explorer-compare-badge-" + kind + "\\">" + esc(text) + "</span>";
+              } else {
+                slot.innerHTML = "";
+              }
+            }
+          }
+          if (diff) {
+            var imp = compareImpactScoreJs(diff);
+            row.setAttribute("data-compare-impact", String(imp));
+            var pw = diff.previousWarningCount || 0;
+            var cw = diff.currentWarningCount || 0;
+            row.setAttribute("data-compare-wdelta", String(cw - pw));
+            row.setAttribute("data-compare-bdelta", String(pw - cw));
+            row.setAttribute("data-compare-kind", badgeKindFromChangeType(diff.changeType) || "");
+          } else {
+            row.removeAttribute("data-compare-impact");
+            row.removeAttribute("data-compare-wdelta");
+            row.removeAttribute("data-compare-bdelta");
+            row.removeAttribute("data-compare-kind");
+          }
+        }
+        updateCompareFilterControlState();
+        updateExplorerBaselineBar();
+        applyComponentsExplorerFilters();
+        refreshComponentDetailModalIfOpen();
+      }
+      window.__syncExplorerCompare = syncExplorerCompare;
 
       function applyComponentsExplorerFilters() {
         var listWrap = document.getElementById("components-explorer-list-wrap");
@@ -434,11 +692,38 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         var structurePathSet = structurePaths ? new Set(structurePaths.map(function(p){ return (p || "").replace(/\\\\/g, "/"); })) : null;
 
         var showHealthy = showHealthyCheckbox ? showHealthyCheckbox.checked : false;
+        ensureActiveCompareContext();
+        var compareFilter = compareSelect && !compareSelect.disabled ? (compareSelect.value || "all") : "all";
+        var activeSourceRoot = getActiveCompareSourceRoot();
+        function matchCompareFilter(row) {
+          if (!compareSelect || compareSelect.disabled) return true;
+          var itemProject = row.getAttribute("data-source-root") || row.getAttribute("data-project") || "";
+          var baselineMap = window.__baselineBySourceRoot__ || {};
+          var compsF = getSnapshotComparisons();
+          if (!activeSourceRoot) return true;
+          if (itemProject !== activeSourceRoot) return false;
+          var idxF = baselineMap[activeSourceRoot];
+          var bkeyF = idxF != null && idxF !== undefined ? baselineKeyFromHistoryIndex(idxF) : null;
+          var payloadF = bkeyF ? compsF[bkeyF] : null;
+          var hasPayload = !!(bkeyF && payloadF);
+          var hasDiff = row.hasAttribute("data-compare-impact");
+          var kind = row.getAttribute("data-compare-kind") || "";
+          if (compareFilter === "all") return true;
+          if (!hasPayload) return false;
+          if (compareFilter === "changed-only") return hasDiff;
+          if (!hasDiff) return false;
+          if (compareFilter === "worse") return kind === "worse";
+          if (compareFilter === "better") return kind === "better";
+          if (compareFilter === "resolved") return kind === "resolved";
+          if (compareFilter === "new") return kind === "new";
+          if (compareFilter === "issue-changed") return kind === "changed";
+          return false;
+        }
         function filterRow(row) {
           var itemIssue = row.getAttribute("data-issue-type") || "";
           var itemSeverity = row.getAttribute("data-severity") || "";
           var itemSearch = row.getAttribute("data-search") || "";
-          var itemProject = row.getAttribute("data-project") || "";
+          var itemProject = row.getAttribute("data-source-root") || row.getAttribute("data-project") || "";
           var itemRuleIds = (row.getAttribute("data-rule-ids") || "").trim().split(/\\s+/).filter(Boolean);
           var itemPath = (row.getAttribute("data-file-path") || "").replace(/\\\\/g, "/");
           var matchIssue = !issueType || issueType === "all" || itemIssue.split(/\\s+/).includes(issueType);
@@ -451,7 +736,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           var elevatedSev = itemSeverity === "WARNING" || itemSeverity === "HIGH" || itemSeverity === "CRITICAL";
           var isHealthy = (itemIssue === "" || itemIssue === "NO_DOMINANT_ISSUE") && warnCount === 0 && !elevatedSev;
           var matchHealthy = showHealthy || !isHealthy || issueType === "NO_DOMINANT_ISSUE";
-          return matchIssue && matchSeverity && matchSearch && matchProject && matchHealthy && matchRule && matchStructure;
+          return matchIssue && matchSeverity && matchSearch && matchProject && matchHealthy && matchRule && matchStructure && matchCompareFilter(row);
         }
 
         var visibleRows = rows.filter(filterRow);
@@ -496,7 +781,30 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         var emptyHint = document.getElementById("components-explorer-empty-hint");
         var tEmptyDyn = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.empty;
         if (emptyTitle && emptyHint && tEmptyDyn && totalVisible === 0) {
-          if (search) {
+          var compareFilterActive =
+            compareSelect && !compareSelect.disabled && compareFilter && compareFilter !== "all";
+          var compareScopeActive = compareSelect && !compareSelect.disabled && activeSourceRoot;
+          if (compareFilterActive && tEmptyDyn.noComparedComponentsFilter) {
+            emptyTitle.textContent = tEmptyDyn.noComparedComponentsFilter;
+            emptyHint.textContent = (tEmptyDyn.noCompareFilterHint) || "";
+          } else if (compareFilterActive && tEmptyDyn.noCompareFilterResults) {
+            emptyTitle.textContent = tEmptyDyn.noCompareFilterResults;
+            emptyHint.textContent = (tEmptyDyn.noCompareFilterHint) || "";
+          } else if (
+            !search &&
+            compareScopeActive &&
+            compareFilter === "all" &&
+            (issueType === "all" || !issueType) &&
+            (severity === "all" || !severity) &&
+            !structureFilter &&
+            !ruleFilter &&
+            !projectFilter &&
+            showHealthy &&
+            tEmptyDyn.noCompareProjectScope
+          ) {
+            emptyTitle.textContent = tEmptyDyn.noCompareProjectScope;
+            emptyHint.textContent = (tEmptyDyn.noMatchFiltersHint) || "";
+          } else if (search) {
             if (tEmptyDyn.noMatchSearch) emptyTitle.textContent = tEmptyDyn.noMatchSearch;
             var hasOtherFilters = (issueType && issueType !== "all") || (severity && severity !== "all") || !!structureFilter || !!ruleFilter || !!projectFilter || !showHealthy;
             if (hasOtherFilters && tEmptyDyn.noMatchCombinedHint) emptyHint.textContent = tEmptyDyn.noMatchCombinedHint;
@@ -542,6 +850,45 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           if (secEl) secEl.textContent = secondary;
         }
 
+        var compSumm = document.getElementById("components-compare-summary");
+        if (compSumm && rows.length > 0) {
+          var baselineMap2 = window.__baselineBySourceRoot__ || {};
+          var hasAnyBaseline = false;
+          for (var bk in baselineMap2) {
+            if (Object.prototype.hasOwnProperty.call(baselineMap2, bk) && baselineMap2[bk] != null && baselineMap2[bk] !== undefined) {
+              hasAnyBaseline = true;
+              break;
+            }
+          }
+          var countsCmp = { worsened: 0, improved: 0, resolved: 0, newC: 0, issueCh: 0 };
+          for (var vi = 0; vi < visibleRows.length; vi++) {
+            var vr = visibleRows[vi];
+            if (!vr.hasAttribute("data-compare-impact")) continue;
+            var vk = vr.getAttribute("data-compare-kind") || "";
+            if (vk === "worse") countsCmp.worsened++;
+            else if (vk === "better") countsCmp.improved++;
+            else if (vk === "resolved") countsCmp.resolved++;
+            else if (vk === "new") countsCmp.newC++;
+            else if (vk === "changed") countsCmp.issueCh++;
+          }
+          var tCmpStrip = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
+          var stripTpl =
+            (tCmpStrip && tCmpStrip.summaryCompareStrip) ||
+            "{worsened} worsened · {improved} improved · {resolved} resolved · {new} new · {issueChanged} issue changed (in view)";
+          if (hasAnyBaseline && visibleRows.some(function(r) { return r.hasAttribute("data-compare-impact"); })) {
+            compSumm.textContent = stripTpl
+              .replace("{worsened}", String(countsCmp.worsened))
+              .replace("{improved}", String(countsCmp.improved))
+              .replace("{resolved}", String(countsCmp.resolved))
+              .replace("{new}", String(countsCmp.newC))
+              .replace("{issueChanged}", String(countsCmp.issueCh));
+            compSumm.hidden = false;
+          } else {
+            compSumm.textContent = "";
+            compSumm.hidden = true;
+          }
+        }
+
         var activeFiltersEl = document.getElementById("components-active-filters");
         if (activeFiltersEl) {
           var chips = [];
@@ -558,6 +905,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           var chipRuleP = (tCompChip && tCompChip.chipRule) || "Rule: ";
           var chipProjectP = (tCompChip && tCompChip.chipProject) || "Project: ";
           var chipSortP = (tCompChip && tCompChip.chipSort) || "Sort: ";
+          var chipCompareP = (tCompChip && tCompChip.chipCompare) || "Compare: ";
           var removeChipTpl = (tCompChip && tCompChip.chipRemove) || "Remove {label}";
           var sortLabelChip = sortSelect && sortSelect.options[sortSelect.selectedIndex] ? sortSelect.options[sortSelect.selectedIndex].text : "Highest risk";
           if (search) {
@@ -586,7 +934,14 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           }
           if (projectFilter) chips.push({ type: "project", label: chipProjectP + projectFilter, fullLabel: chipProjectP + projectFilter });
           if (!showHealthy && healthyCount > 0) chips.push({ type: "healthyHidden", label: healthyHiddenLabel, fullLabel: healthyHiddenLabel });
-          if (sortSelect && sortSelect.value !== "highest-risk") chips.push({ type: "sort", label: chipSortP + sortLabelChip, fullLabel: chipSortP + sortLabelChip });
+          if (compareSelect && !compareSelect.disabled && compareFilter && compareFilter !== "all") {
+            var optC = compareSelect.options[compareSelect.selectedIndex];
+            var compareLbl = optC ? optC.text : compareFilter;
+            chips.push({ type: "compare", label: chipCompareP + compareLbl, fullLabel: chipCompareP + compareLbl });
+          }
+          if (sortSelect && sortSelect.value !== "highest-risk") {
+            chips.push({ type: "sort", label: chipSortP + sortLabelChip, fullLabel: chipSortP + sortLabelChip });
+          }
           var html = "";
           chips.forEach(function(c) {
             var full = c.fullLabel || c.label || "";
@@ -608,6 +963,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
               if (filterType === "rule") { var el = document.getElementById("filter-rule-id"); if (el) el.value = ""; }
               if (filterType === "project") { var el = document.getElementById("filter-project"); if (el) el.value = ""; }
               if (filterType === "healthyHidden" && showHealthyCheckbox) showHealthyCheckbox.checked = true;
+              if (filterType === "compare" && compareSelect) compareSelect.value = "all";
               if (filterType === "sort" && sortSelect) sortSelect.value = "highest-risk";
               currentPage = 0;
               if (filterType === "sort") applySort();
@@ -624,6 +980,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
             var structEl = document.getElementById("filter-structure-concern"); if (structEl) structEl.value = "";
             var projEl = document.getElementById("filter-project"); if (projEl) projEl.value = "";
             if (showHealthyCheckbox) showHealthyCheckbox.checked = false;
+            if (compareSelect) compareSelect.value = "all";
             currentPage = 0;
             applySort();
             applyFilters();
@@ -677,6 +1034,27 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           if (sortBy === "dependency-count") return num(b, "dependency-count") - num(a, "dependency-count");
           if (sortBy === "template-complexity") return num(b, "template-lines") - num(a, "template-lines");
           if (sortBy === "warning-count") return num(b, "warning-count") - num(a, "warning-count");
+          if (sortBy === "diff-impact") {
+            var ia = parseInt(a.getAttribute("data-compare-impact") || "-1", 10);
+            var ib = parseInt(b.getAttribute("data-compare-impact") || "-1", 10);
+            if (ib !== ia) return ib - ia;
+          }
+          if (sortBy === "worse-first") {
+            var wa = parseInt(a.getAttribute("data-compare-wdelta") || "0", 10);
+            var wb = parseInt(b.getAttribute("data-compare-wdelta") || "0", 10);
+            if (wb !== wa) return wb - wa;
+            var i1 = parseInt(a.getAttribute("data-compare-impact") || "-1", 10);
+            var i2 = parseInt(b.getAttribute("data-compare-impact") || "-1", 10);
+            if (i2 !== i1) return i2 - i1;
+          }
+          if (sortBy === "better-first") {
+            var ba = parseInt(a.getAttribute("data-compare-bdelta") || "0", 10);
+            var bb = parseInt(b.getAttribute("data-compare-bdelta") || "0", 10);
+            if (bb !== ba) return bb - ba;
+            var j1 = parseInt(a.getAttribute("data-compare-impact") || "-1", 10);
+            var j2 = parseInt(b.getAttribute("data-compare-impact") || "-1", 10);
+            if (j2 !== j1) return j2 - j1;
+          }
           if (sortBy === "severity") {
             var ra = severityRank(a.getAttribute("data-severity") || "");
             var rb = severityRank(b.getAttribute("data-severity") || "");
@@ -729,6 +1107,12 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           applyComponentsExplorerFilters();
         });
       }
+      if (compareSelect) {
+        compareSelect.addEventListener("change", function() {
+          currentPage = 0;
+          applyComponentsExplorerFilters();
+        });
+      }
       if (pageSizeSelect) pageSizeSelect.addEventListener("change", function() { currentPage = 0; applyComponentsExplorerFilters(); });
       if (searchInput) {
         var searchTimeout;
@@ -760,6 +1144,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           var projectFilterEl = document.getElementById("filter-project");
           if (projectFilterEl) projectFilterEl.value = "";
           if (showHealthyCheckbox) showHealthyCheckbox.checked = false;
+          if (compareSelect) compareSelect.value = "all";
           currentPage = 0;
           applySort();
           applyFilters();
@@ -771,7 +1156,7 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
 
       if (document.getElementById("components-explorer-list-wrap")) {
         applySort();
-        applyComponentsExplorerFilters();
+        syncExplorerCompare();
       }
 
       function applyRulesFilters() {
@@ -1491,6 +1876,77 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
         html += "<div class=\\"drawer-section drawer-expected-outcome\\"><h4 class=\\"drawer-section-title\\">" + (dt("drawer.expectedOutcome") || "Expected outcome") + "</h4><p class=\\"drawer-expected-text\\">" + esc(expectedOutcomeText) + "</p></div>";
         html += renderEvidenceBlock(entry, dt, esc);
         html += renderFileContext(entry, dt, esc);
+        html += (function renderCompareMiniBlock() {
+          function legacyNormalizeFileKey(fp) {
+            return String(fp || "")
+              .replace(/\\\\/g, "/")
+              .toLowerCase();
+          }
+          var sr = entry.sourceRoot || "";
+          var fp = entry.filePath || "";
+          if (!sr || !fp) return "";
+          var baselineMap = window.__baselineBySourceRoot__ || {};
+          var idx = baselineMap[sr];
+          if (idx == null || idx === undefined) return "";
+          var bkey = baselineKeyFromHistoryIndex(idx);
+          if (!bkey) return "";
+          var comps = getSnapshotComparisons();
+          var payload = comps[bkey];
+          var pc = payload && payload.projectComparisons ? payload.projectComparisons[sr] : null;
+          var ck = entry.compareComponentKey || legacyNormalizeFileKey(fp);
+          var diff = pc && pc.componentChangesByKey ? pc.componentChangesByKey[ck] : null;
+          if (!diff) return "";
+          var tc = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
+          var tdraw = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.drawer;
+          var title = (tdraw && tdraw.compareMiniTitle) || "Baseline comparison";
+          var lblPw = (tc && tc.comparePrevWarnings) || "Previous warnings";
+          var lblCw = (tc && tc.compareCurrWarnings) || "Current warnings";
+          var lblPi = (tc && tc.comparePrevIssue) || "Previous issue";
+          var lblCi = (tc && tc.compareCurrIssue) || "Current issue";
+          var lblAdd = (tc && tc.compareAddedRules) || "Added rules";
+          var lblRem = (tc && tc.compareRemovedRules) || "Removed rules";
+          function fmtIssue(x) {
+            return x ? String(x).replace(/_/g, " ") : "—";
+          }
+          var addRules = (diff.addedRules || [])
+            .slice(0, 6)
+            .map(function(rid) { return resolveRuleTitle(rid); })
+            .filter(Boolean)
+            .join(", ");
+          var remRules = (diff.removedRules || [])
+            .slice(0, 6)
+            .map(function(rid) { return resolveRuleTitle(rid); })
+            .filter(Boolean)
+            .join(", ");
+          return (
+            "<div class=\\"drawer-section drawer-compare-mini\\"><h4 class=\\"drawer-section-title\\">" +
+            esc(title) +
+            "</h4><div class=\\"drawer-compare-mini-grid\\">" +
+            "<div class=\\"drawer-compare-mini-row\\"><span>" +
+            esc(lblPw) +
+            "</span><span>" +
+            esc(String(diff.previousWarningCount)) +
+            "</span></div>" +
+            "<div class=\\"drawer-compare-mini-row\\"><span>" +
+            esc(lblCw) +
+            "</span><span>" +
+            esc(String(diff.currentWarningCount)) +
+            "</span></div>" +
+            "<div class=\\"drawer-compare-mini-row\\"><span>" +
+            esc(lblPi) +
+            "</span><span>" +
+            esc(fmtIssue(diff.previousDominantIssue)) +
+            "</span></div>" +
+            "<div class=\\"drawer-compare-mini-row\\"><span>" +
+            esc(lblCi) +
+            "</span><span>" +
+            esc(fmtIssue(diff.currentDominantIssue)) +
+            "</span></div></div>" +
+            (addRules ? "<p class=\\"drawer-compare-rules\\"><strong>" + esc(lblAdd) + ":</strong> " + esc(addRules) + "</p>" : "") +
+            (remRules ? "<p class=\\"drawer-compare-rules\\"><strong>" + esc(lblRem) + ":</strong> " + esc(remRules) + "</p>" : "") +
+            "</div>"
+          );
+        })();
 
         var analysisNotes = [];
         if (entry.severityTrustSummary) analysisNotes.push(entry.severityTrustSummary);
@@ -1804,4 +2260,585 @@ export const REPORT_CLIENT_SCRIPT = `    (function() {
           return;
         }
       });
+
+      (function initSnapshotComparePicker() {
+        var modal = document.getElementById("snapshot-compare-modal");
+        var detailModal = document.getElementById("project-compare-detail-modal");
+        var detailModalBody = document.getElementById("project-compare-detail-modal-body");
+        var detailModalTitle = document.getElementById("project-compare-detail-modal-title");
+        var listEl = document.querySelector("[data-snapshot-compare-list]");
+        var pickerSourceRoot = null;
+
+        function closeProjectCompareDetailModal() {
+          if (!detailModal || detailModal.hasAttribute("hidden")) return;
+          detailModal.setAttribute("hidden", "hidden");
+          detailModal.setAttribute("aria-hidden", "true");
+          if (detailModalBody) detailModalBody.innerHTML = "";
+        }
+        window.__closeProjectCompareDetailModal__ = closeProjectCompareDetailModal;
+        var baselineBySourceRoot = {};
+        window.__baselineBySourceRoot__ = baselineBySourceRoot;
+        window.__activeCompareContext__ = window.__activeCompareContext__ || null;
+
+        function getHistory() {
+          return Array.isArray(window.__SNAPSHOT_HISTORY__) ? window.__SNAPSHOT_HISTORY__ : [];
+        }
+
+        function findStatusEl(sourceRoot) {
+          var nodes = document.querySelectorAll("[data-project-compare-status]");
+          for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i].getAttribute("data-source-root") === sourceRoot) return nodes[i];
+          }
+          return null;
+        }
+
+        function findDiffEl(sourceRoot) {
+          var nodes = document.querySelectorAll("[data-project-compare-diff]");
+          for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i].getAttribute("data-source-root") === sourceRoot) return nodes[i];
+          }
+          return null;
+        }
+
+        function findToggleEl(sourceRoot) {
+          var nodes = document.querySelectorAll("[data-project-compare-toggle-details]");
+          for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i].getAttribute("data-source-root") === sourceRoot) return nodes[i];
+          }
+          return null;
+        }
+
+        function getComparisons() {
+          if (typeof window.__SNAPSHOT_COMPARISONS__ === "object" && window.__SNAPSHOT_COMPARISONS__ !== null) {
+            return window.__SNAPSHOT_COMPARISONS__;
+          }
+          return {};
+        }
+
+        function baselineKeyFromIndex(idx) {
+          var hist = getHistory();
+          var s = hist[idx];
+          if (!s) return null;
+          if (s.snapshotHash) return s.snapshotHash;
+          if (s.runId) return s.runId;
+          return null;
+        }
+
+        function formatSigned(n) {
+          if (typeof n !== "number" || isNaN(n)) return "0";
+          if (n > 0) return "+" + n;
+          return String(n);
+        }
+
+        function formatSignedFloat(n) {
+          if (typeof n !== "number" || isNaN(n)) return "0";
+          if (n > 0) return "+" + n.toFixed(1);
+          if (n < 0) return n.toFixed(1);
+          return "0";
+        }
+
+        function clearProjectComparePanel(diffEl) {
+          closeProjectCompareDetailModal();
+          if (!diffEl) return;
+          var sr = diffEl.getAttribute("data-source-root");
+          diffEl.innerHTML = "";
+          diffEl.hidden = true;
+          var tg = sr ? findToggleEl(sr) : null;
+          if (tg) {
+            tg.hidden = true;
+            tg.setAttribute("aria-expanded", "false");
+            var tFilC = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
+            tg.textContent = (tFilC && tFilC.projectCompareViewDetails) || "View details";
+          }
+        }
+
+        function renderProjectCompareDetailsBody(pc, payload, sourceRoot, omitHeader) {
+          var sd = pc.summaryDeltas || {};
+          var fnShort = window.__formatProjectShortName__ || function(x) { return x || ""; };
+          var shortP = fnShort(sourceRoot);
+          var tFilH = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
+          var titleTpl = (tFilH && tFilH.projectCompareDetailsTitle) || "{project} — compare details";
+          var secMetrics = (tFilH && tFilH.projectCompareSectionMetrics) || "Summary";
+          var secDim = (tFilH && tFilH.projectCompareSectionDimensions) || "Findings by dimension";
+          var secHigh = (tFilH && tFilH.projectCompareSectionHighlights) || "Highlights";
+          var lblFd = (tFilH && tFilH.projectCompareLabelFindingsDelta) || "Findings Δ";
+          var lblWo = (tFilH && tFilH.projectCompareLabelWorsened) || "Worsened";
+          var lblIm = (tFilH && tFilH.projectCompareLabelImproved) || "Improved";
+          var lblRe = (tFilH && tFilH.projectCompareLabelResolved) || "Resolved";
+          var lblDc = (tFilH && tFilH.projectCompareDimComponent) || "Component";
+          var lblDl = (tFilH && tFilH.projectCompareDimLifecycle) || "Lifecycle";
+          var lblDt = (tFilH && tFilH.projectCompareDimTemplate) || "Template";
+          var lblDr = (tFilH && tFilH.projectCompareDimResponsibility) || "Responsibility";
+          var lblTopReg = (tFilH && tFilH.projectCompareTopRegressions) || "Largest regressions";
+          var lblTopImp = (tFilH && tFilH.projectCompareTopImprovements) || "Largest improvements";
+          var lblRuUp = (tFilH && tFilH.projectCompareRulesIncreasing) || "Rules increasing";
+          var lblRuDn = (tFilH && tFilH.projectCompareRulesDecreasing) || "Rules decreasing";
+          var warnTpl = (tFilH && tFilH.projectCompareWarningsDelta) || "{n} warnings";
+          function warnDelta(signedPart) {
+            return esc(warnTpl.replace("{n}", signedPart));
+          }
+          var headerHtml = omitHeader
+            ? ""
+            : "<header class=\\"project-compare-details-header\\"><h3 class=\\"project-compare-details-heading\\">" +
+              esc(titleTpl.replace("{project}", shortP)) +
+              "</h3></header>";
+          var pFindingsDelta =
+            (sd.componentFindings || 0) +
+            (sd.lifecycleFindings || 0) +
+            (sd.templateFindings || 0) +
+            (sd.responsibilityFindings || 0);
+          function chipStacked(valueHtml, label, extraClass) {
+            var cls = "project-compare-detail-chip project-compare-detail-chip--stacked" + (extraClass ? " " + extraClass : "");
+            return (
+              "<span class=\\"" + cls + "\\">" +
+              "<span class=\\"project-compare-detail-chip-value\\">" +
+              valueHtml +
+              "</span>" +
+              "<span class=\\"project-compare-detail-chip-label\\">" +
+              esc(label) +
+              "</span></span>"
+            );
+          }
+          var chipsHtml =
+            "<section class=\\"project-compare-detail-section project-compare-detail-section--metrics\\" aria-labelledby=\\"project-compare-sec-metrics\\">" +
+            "<h4 id=\\"project-compare-sec-metrics\\" class=\\"project-compare-detail-section-title\\">" +
+            esc(secMetrics) +
+            "</h4>" +
+            "<div class=\\"project-compare-detail-chips\\" role=\\"group\\">" +
+            chipStacked(esc(formatSigned(pFindingsDelta)), lblFd, "") +
+            chipStacked(String(pc.worsenedCount || 0), lblWo, "project-compare-detail-chip-worse") +
+            chipStacked(String(pc.improvedCount || 0), lblIm, "project-compare-detail-chip-better") +
+            chipStacked(String(pc.resolvedCount || 0), lblRe, "") +
+            "</div></section>";
+          var dimInner =
+            "<div class=\\"project-compare-dimensions project-compare-dimensions--grid\\">" +
+            "<div class=\\"project-compare-dim-row\\"><span class=\\"project-compare-dim-label\\">" +
+            esc(lblDc) +
+            "</span><span class=\\"project-compare-dim-value\\">" +
+            esc(formatSigned(sd.componentFindings || 0)) +
+            "</span></div>" +
+            "<div class=\\"project-compare-dim-row\\"><span class=\\"project-compare-dim-label\\">" +
+            esc(lblDl) +
+            "</span><span class=\\"project-compare-dim-value\\">" +
+            esc(formatSigned(sd.lifecycleFindings || 0)) +
+            "</span></div>" +
+            "<div class=\\"project-compare-dim-row\\"><span class=\\"project-compare-dim-label\\">" +
+            esc(lblDt) +
+            "</span><span class=\\"project-compare-dim-value\\">" +
+            esc(formatSigned(sd.templateFindings || 0)) +
+            "</span></div>" +
+            "<div class=\\"project-compare-dim-row\\"><span class=\\"project-compare-dim-label\\">" +
+            esc(lblDr) +
+            "</span><span class=\\"project-compare-dim-value\\">" +
+            esc(formatSigned(sd.responsibilityFindings || 0)) +
+            "</span></div></div>";
+          var dimSection =
+            "<section class=\\"project-compare-detail-section project-compare-detail-section--dimensions\\" aria-labelledby=\\"project-compare-sec-dim\\">" +
+            "<h4 id=\\"project-compare-sec-dim\\" class=\\"project-compare-detail-section-title\\">" +
+            esc(secDim) +
+            "</h4>" +
+            dimInner +
+            "</section>";
+
+          function listSection(title, items, kind) {
+            if (!items || items.length === 0) return "";
+            var rows = items.slice(0, 5)
+              .map(function(it) {
+                var name = it.className || it.filePath || "";
+                var signed =
+                  kind === "worse"
+                    ? formatSigned((it.currentWarningCount || 0) - (it.previousWarningCount || 0))
+                    : formatSigned((it.previousWarningCount || 0) - (it.currentWarningCount || 0));
+                var sub = warnDelta(signed);
+                return (
+                  "<li><span class=\\"project-compare-comp-name\\">" +
+                  esc(name) +
+                  "</span> <span class=\\"project-compare-comp-meta\\">" +
+                  sub +
+                  "</span></li>"
+                );
+              })
+              .join("");
+            return (
+              "<div class=\\"project-compare-list-block\\"><div class=\\"project-compare-list-title\\">" +
+              esc(title) +
+              "</div><ul class=\\"project-compare-comp-list\\">" +
+              rows +
+              "</ul></div>"
+            );
+          }
+
+          function ruleList(title, rows) {
+            if (!rows || rows.length === 0) return "";
+            var lis = rows
+              .map(function(r) {
+                return (
+                  "<li><span class=\\"project-compare-rule-id\\">" +
+                  esc(resolveRuleTitle(r.ruleId)) +
+                  "</span> <span class=\\"project-compare-rule-delta\\">" +
+                  esc(formatSigned(r.delta)) +
+                  "</span></li>"
+                );
+              })
+              .join("");
+            return (
+              "<div class=\\"project-compare-list-block\\"><div class=\\"project-compare-list-title\\">" +
+              esc(title) +
+              "</div><ul class=\\"project-compare-rule-list\\">" +
+              lis +
+              "</ul></div>"
+            );
+          }
+          var colA = listSection(lblTopReg, pc.topWorsenedComponents, "worse") + listSection(lblTopImp, pc.topImprovedComponents, "better");
+          var colB = ruleList(lblRuUp, pc.topRuleIncreases) + ruleList(lblRuDn, pc.topRuleDecreases);
+          var twoCol =
+            "<section class=\\"project-compare-detail-section project-compare-detail-section--lists\\" aria-labelledby=\\"project-compare-sec-high\\">" +
+            "<h4 id=\\"project-compare-sec-high\\" class=\\"project-compare-detail-section-title project-compare-detail-section-title--full\\">" +
+            esc(secHigh) +
+            "</h4>" +
+            "<div class=\\"project-compare-details-columns\\">" +
+            "<div class=\\"project-compare-details-col\\">" +
+            colA +
+            "</div>" +
+            "<div class=\\"project-compare-details-col\\">" +
+            colB +
+            "</div>" +
+            "</div></section>";
+          return (
+            "<div class=\\"project-compare-details-inner" +
+            (omitHeader ? " project-compare-details-inner--modal" : "") +
+            "\\">" +
+            headerHtml +
+            chipsHtml +
+            dimSection +
+            twoCol +
+            "</div>"
+          );
+        }
+
+        function openProjectCompareDetailModal(sourceRoot) {
+          if (!detailModal || !detailModalBody) return;
+          closeModal();
+          var idxD = baselineBySourceRoot[sourceRoot];
+          var keyD = idxD != null && idxD !== undefined ? baselineKeyFromIndex(idxD) : null;
+          var payloadD = keyD ? getComparisons()[keyD] : null;
+          var tFilD = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
+          var fnShortD = window.__formatProjectShortName__ || function(x) { return x || ""; };
+          var shortPD = fnShortD(sourceRoot);
+          var titleTplD = (tFilD && tFilD.projectCompareDetailsTitle) || "{project} — compare details";
+          if (detailModalTitle) detailModalTitle.textContent = titleTplD.replace("{project}", shortPD);
+          if (!payloadD) {
+            var msgUD = (tFilD && tFilD.projectCompareUnavailable) || "Compare data is not available for this baseline.";
+            detailModalBody.innerHTML = "<div class=\\"project-compare-modal-empty\\">" + esc(msgUD) + "</div>";
+            detailModal.removeAttribute("hidden");
+            detailModal.setAttribute("aria-hidden", "false");
+            return;
+          }
+          var pcD = payloadD.projectComparisons ? payloadD.projectComparisons[sourceRoot] : null;
+          if (!pcD) {
+            var msgND = (tFilD && tFilD.projectCompareNoDiff) || "No snapshot changes for this project.";
+            detailModalBody.innerHTML = "<div class=\\"project-compare-modal-empty\\">" + esc(msgND) + "</div>";
+            detailModal.removeAttribute("hidden");
+            detailModal.setAttribute("aria-hidden", "false");
+            return;
+          }
+          detailModalBody.innerHTML = renderProjectCompareDetailsBody(pcD, payloadD, sourceRoot, true);
+          detailModal.removeAttribute("hidden");
+          detailModal.setAttribute("aria-hidden", "false");
+        }
+
+        function renderProjectComparePanel(diffEl, sourceRoot, payload) {
+          if (!diffEl) return;
+          var toggleBtn = findToggleEl(sourceRoot);
+          var tFil = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
+          var msgUnavailable = (tFil && tFil.projectCompareUnavailable) || "Compare data is not available for this baseline.";
+          var msgNoDiff = (tFil && tFil.projectCompareNoDiff) || "No snapshot changes for this project.";
+          var lblView = (tFil && tFil.projectCompareViewDetails) || "View details";
+          if (toggleBtn) {
+            toggleBtn.hidden = true;
+            toggleBtn.textContent = lblView;
+          }
+          if (!payload) {
+            diffEl.hidden = false;
+            diffEl.innerHTML = "<div class=\\"project-compare-diff-inner project-compare-diff-inner-compact\\"><div class=\\"project-compare-diff-warning\\">" + esc(msgUnavailable) + "</div></div>";
+            return;
+          }
+          var pc = payload.projectComparisons ? payload.projectComparisons[sourceRoot] : null;
+          if (!pc) {
+            diffEl.hidden = false;
+            diffEl.innerHTML = "<div class=\\"project-compare-diff-inner project-compare-diff-inner-compact\\"><div class=\\"project-compare-diff-empty\\">" + esc(msgNoDiff) + "</div></div>";
+            return;
+          }
+          var sd = pc.summaryDeltas || {};
+          var ws = payload.workspace || {};
+          var pFindingsDelta =
+            (sd.componentFindings || 0) +
+            (sd.lifecycleFindings || 0) +
+            (sd.templateFindings || 0) +
+            (sd.responsibilityFindings || 0);
+          var overallD = ws.overallScore && typeof ws.overallScore.delta === "number" ? ws.overallScore.delta : 0;
+          var compactParts = [];
+          compactParts.push("<div class=\\"project-compare-diff-inner project-compare-diff-inner-compact\\">");
+          compactParts.push(
+            "<div class=\\"project-compare-card-metrics\\" role=\\"group\\">" +
+              "<span class=\\"project-compare-card-chip project-compare-card-chip-findings\\">" +
+              esc(formatSigned(pFindingsDelta)) +
+              " findings Δ</span>" +
+              "<span class=\\"project-compare-card-chip\\">" +
+              esc(formatSignedFloat(overallD)) +
+              " overall</span>" +
+              "<span class=\\"project-compare-card-chip project-compare-card-chip-worse\\">" +
+              String(pc.worsenedCount) +
+              " worsened</span>" +
+              "<span class=\\"project-compare-card-chip project-compare-card-chip-better\\">" +
+              String(pc.improvedCount) +
+              " improved</span>" +
+              "<span class=\\"project-compare-card-chip\\">" +
+              String(pc.resolvedCount) +
+              " resolved</span>" +
+              "</div>"
+          );
+          compactParts.push("</div>");
+          diffEl.innerHTML = compactParts.join("");
+          diffEl.hidden = false;
+          if (toggleBtn) {
+            toggleBtn.hidden = false;
+          }
+        }
+
+        function runExplorerCompareSync() {
+          if (typeof window.__syncExplorerCompare === "function") window.__syncExplorerCompare();
+        }
+
+        function syncComparePanel(sourceRoot) {
+          var idx = baselineBySourceRoot[sourceRoot];
+          var diffEl = findDiffEl(sourceRoot);
+          if (idx == null || idx === undefined) {
+            clearProjectComparePanel(diffEl);
+            runExplorerCompareSync();
+            return;
+          }
+          var key = baselineKeyFromIndex(idx);
+          var payload = key ? getComparisons()[key] : null;
+          if (!key || !payload) {
+            if (diffEl) {
+              var tFil2 = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.filters;
+              var msgU2 = (tFil2 && tFil2.projectCompareUnavailable) || "Compare data is not available for this baseline.";
+              var tgU = findToggleEl(sourceRoot);
+              if (tgU) tgU.hidden = true;
+              diffEl.hidden = false;
+              diffEl.innerHTML = "<div class=\\"project-compare-diff-inner project-compare-diff-inner-compact\\"><div class=\\"project-compare-diff-warning\\">" + esc(msgU2) + "</div></div>";
+            }
+            runExplorerCompareSync();
+            return;
+          }
+          renderProjectComparePanel(diffEl, sourceRoot, payload);
+          runExplorerCompareSync();
+        }
+
+        function escAttr(s) {
+          return String(s || "")
+            .replace(/&/g, "&amp;")
+            .replace(/"/g, "&quot;")
+            .replace(/</g, "&lt;");
+        }
+
+        function formatRowLabel(s) {
+          var dateStr = "—";
+          if (s && s.generatedAt) {
+            try { dateStr = new Date(s.generatedAt).toLocaleString(); } catch (e1) {}
+          }
+          var risk = (s && s.riskLevel) ? s.riskLevel : "—";
+          var findings = s && s.totalFindings != null ? s.totalFindings + " findings" : "— findings";
+          var score = s && s.overallScore != null ? "score " + Number(s.overallScore).toFixed(1) : "score —";
+          return dateStr + " · " + risk + " · " + findings + " · " + score;
+        }
+
+        function renderPickerList() {
+          if (!listEl) return;
+          var hist = getHistory();
+          if (hist.length === 0) {
+            listEl.innerHTML = "<div class=\\"snapshot-compare-empty\\">No previous snapshots found for this workspace.</div>";
+            return;
+          }
+          listEl.innerHTML = hist.map(function(s, i) {
+            return "<button type=\\"button\\" class=\\"snapshot-compare-row\\" data-snapshot-index=\\"" + i + "\\">" + esc(formatRowLabel(s)) + "</button>";
+          }).join("");
+        }
+
+        function renderBaselineStatus(el, sourceRoot) {
+          if (!el) return;
+          var idx = baselineBySourceRoot[sourceRoot];
+          if (idx == null || idx === undefined) {
+            el.hidden = true;
+            el.innerHTML = "";
+            clearProjectComparePanel(findDiffEl(sourceRoot));
+            runExplorerCompareSync();
+            syncCompareActiveCardHighlight();
+            return;
+          }
+          var hist = getHistory();
+          var s = hist[idx];
+          var dateStr = "—";
+          if (s && s.generatedAt) {
+            try { dateStr = new Date(s.generatedAt).toLocaleString(); } catch (e2) { dateStr = "—"; }
+          }
+          var tCompB = window.__TRANSLATIONS__ && window.__TRANSLATIONS__.components;
+          var snapTplB = (tCompB && tCompB.explorerBaselineSnapshotLabel) || "Baseline snapshot: {date}";
+          var label = snapTplB.replace("{date}", dateStr);
+          var lblChg = (tCompB && tCompB.explorerBaselineCardChange) || (tCompB && tCompB.explorerChangeBaseline) || "Change baseline";
+          var lblClr = (tCompB && tCompB.explorerBaselineCardClear) || "Clear";
+          el.hidden = false;
+          el.innerHTML =
+            "<span class=\\"project-compare-status-line\\">" + esc(label) + "</span>" +
+            "<span class=\\"project-compare-inline-actions\\">" +
+            "<button type=\\"button\\" class=\\"project-compare-change\\" data-source-root=\\"" + escAttr(sourceRoot) + "\\">" +
+            esc(lblChg) +
+            "</button>" +
+            "<button type=\\"button\\" class=\\"project-compare-clear\\" data-source-root=\\"" + escAttr(sourceRoot) + "\\">" +
+            esc(lblClr) +
+            "</button>" +
+            "</span>";
+          syncComparePanel(sourceRoot);
+          syncCompareActiveCardHighlight();
+        }
+
+        function openModal(sourceRoot) {
+          closeProjectCompareDetailModal();
+          pickerSourceRoot = sourceRoot || "";
+          if (!modal) return;
+          renderPickerList();
+          modal.removeAttribute("hidden");
+          modal.setAttribute("aria-hidden", "false");
+        }
+
+        function closeModal() {
+          if (!modal) return;
+          modal.setAttribute("hidden", "hidden");
+          modal.setAttribute("aria-hidden", "true");
+          pickerSourceRoot = null;
+        }
+
+        document.body.addEventListener("click", function(e) {
+          var detailCloseEl = e.target && e.target.closest ? e.target.closest("[data-project-compare-detail-close]") : null;
+          if (detailCloseEl) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeProjectCompareDetailModal();
+            return;
+          }
+          var compareBtn = e.target && e.target.closest ? e.target.closest(".project-compare-btn") : null;
+          if (compareBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            var sr = compareBtn.getAttribute("data-source-root") || "";
+            openModal(sr);
+            return;
+          }
+          var toggleDetailsBtn = e.target && e.target.closest ? e.target.closest("[data-project-compare-toggle-details]") : null;
+          if (toggleDetailsBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            var srTd = toggleDetailsBtn.getAttribute("data-source-root") || "";
+            openProjectCompareDetailModal(srTd);
+            return;
+          }
+          var closeEl = e.target && e.target.closest ? e.target.closest("[data-snapshot-compare-close]") : null;
+          if (closeEl) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeModal();
+            return;
+          }
+          var row = e.target && e.target.closest ? e.target.closest(".snapshot-compare-row") : null;
+          if (row && modal && !modal.hasAttribute("hidden")) {
+            e.preventDefault();
+            e.stopPropagation();
+            var idx = parseInt(row.getAttribute("data-snapshot-index") || "-1", 10);
+            if (idx >= 0 && pickerSourceRoot != null && pickerSourceRoot !== undefined) {
+              baselineBySourceRoot[pickerSourceRoot] = idx;
+              window.__activeCompareContext__ = { sourceRoot: pickerSourceRoot, historyIndex: idx };
+              var projInput = document.getElementById("filter-project");
+              if (projInput) projInput.value = pickerSourceRoot;
+              var st = findStatusEl(pickerSourceRoot);
+              if (st) renderBaselineStatus(st, pickerSourceRoot);
+              closeModal();
+            }
+            return;
+          }
+          var changeB = e.target && e.target.closest ? e.target.closest(".project-compare-change") : null;
+          if (changeB) {
+            e.preventDefault();
+            e.stopPropagation();
+            var srCh = changeB.getAttribute("data-source-root") || "";
+            openModal(srCh);
+            return;
+          }
+          var clearB = e.target && e.target.closest ? e.target.closest(".project-compare-clear") : null;
+          if (clearB) {
+            e.preventDefault();
+            e.stopPropagation();
+            var srCl = clearB.getAttribute("data-source-root") || "";
+            delete baselineBySourceRoot[srCl];
+            var ctxCl = window.__activeCompareContext__;
+            if (ctxCl && ctxCl.sourceRoot === srCl) window.__activeCompareContext__ = null;
+            if (typeof window.__ensureActiveCompareContext__ === "function") window.__ensureActiveCompareContext__();
+            closeProjectCompareDetailModal();
+            var stCl = findStatusEl(srCl);
+            if (stCl) renderBaselineStatus(stCl, srCl);
+            else {
+              clearProjectComparePanel(findDiffEl(srCl));
+              runExplorerCompareSync();
+            }
+            return;
+          }
+        });
+
+        document.addEventListener("keydown", function(e) {
+          if (e.key !== "Escape") return;
+          var dmEsc = document.getElementById("project-compare-detail-modal");
+          if (dmEsc && !dmEsc.hasAttribute("hidden")) {
+            e.preventDefault();
+            closeProjectCompareDetailModal();
+            return;
+          }
+          if (!modal || modal.hasAttribute("hidden")) return;
+          e.preventDefault();
+          closeModal();
+        });
+
+        var explorerBaselineClear = document.getElementById("components-explorer-baseline-clear");
+        if (explorerBaselineClear) {
+          explorerBaselineClear.addEventListener("click", function(ev) {
+            ev.preventDefault();
+            closeProjectCompareDetailModal();
+            window.__activeCompareContext__ = null;
+            var baselineMapGlobal = window.__baselineBySourceRoot__ || {};
+            for (var kbc in baselineMapGlobal) {
+              if (Object.prototype.hasOwnProperty.call(baselineMapGlobal, kbc)) delete baselineMapGlobal[kbc];
+            }
+            var statusNodes = document.querySelectorAll("[data-project-compare-status]");
+            for (var si = 0; si < statusNodes.length; si++) {
+              var stN = statusNodes[si];
+              stN.hidden = true;
+              stN.innerHTML = "";
+              var srN = stN.getAttribute("data-source-root");
+              if (srN) clearProjectComparePanel(findDiffEl(srN));
+            }
+            runExplorerCompareSync();
+          });
+        }
+        var explorerBaselineChange = document.getElementById("components-explorer-baseline-change");
+        if (explorerBaselineChange) {
+          explorerBaselineChange.addEventListener("click", function(ev) {
+            ev.preventDefault();
+            var ctx = window.__activeCompareContext__;
+            var srChBar = ctx && ctx.sourceRoot ? ctx.sourceRoot : "";
+            openModal(srChBar);
+          });
+        }
+        window.__openSnapshotCompareModalForSourceRoot = function(sr) {
+          openModal(sr || "");
+        };
+      })();
     })();`;

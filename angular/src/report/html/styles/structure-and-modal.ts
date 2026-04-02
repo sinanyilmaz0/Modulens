@@ -274,7 +274,6 @@ export const REPORT_STYLES_STRUCTURE_AND_MODAL = `
 .architecture-pattern-card .architecture-pattern-issues { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .architecture-pattern-card .architecture-pattern-refactor { color: var(--color-accent); margin-top: 4px; }
 
-/* Pattern Card V2 (structured) */
 .pattern-card-v2 {
   background: var(--color-surface-elevated);
   border-radius: var(--radius-lg);

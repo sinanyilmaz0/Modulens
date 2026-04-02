@@ -243,6 +243,17 @@ export interface Translations {
     noMatchSearchHint?: string;
     /** When both search and filters may apply */
     noMatchCombinedHint?: string;
+    noCompareFilterResults?: string;
+    noCompareFilterHint?: string;
+    /** Compare mode active but no rows in the scoped project */
+    noCompareProjectScope?: string;
+    /** Narrowed compare filter yields nothing */
+    noComparedComponentsFilter?: string;
+    selectBaselineForCompare?: string;
+    /** Enable compare from Overview */
+    selectBaselineEnableCompare?: string;
+    noProjectCompareDiff?: string;
+    noCompareDataForBaseline?: string;
     noRepeatedArchitecture?: string;
     noFeaturePatterns?: string;
   };
@@ -310,6 +321,7 @@ export interface Translations {
     diagnosisQuiet?: string;
     /** Warnings/findings but dominance threshold not met */
     diagnosisUnranked?: string;
+    compareMiniTitle?: string;
   };
   evidence: {
     lineCount: string;
@@ -364,6 +376,55 @@ export interface Translations {
     /** Shown near sort control (accessibility / hint) */
     sortHelper?: string;
     pageSize?: string;
+    /** Snapshot compare (Components Explorer) */
+    compareBaseline?: string;
+    compareAll?: string;
+    compareChangedOnly?: string;
+    compareWorse?: string;
+    compareBetter?: string;
+    compareResolved?: string;
+    compareNew?: string;
+    compareIssueChanged?: string;
+    compareFilterHelper?: string;
+    /** Tooltip when compare filter is disabled (no baseline selected on any project card). */
+    compareFilterDisabledHint?: string;
+    /** Project card: embedded compare payload missing for chosen baseline. */
+    projectCompareUnavailable?: string;
+    /** Project card: no diff entries for this project vs baseline. */
+    projectCompareNoDiff?: string;
+    /** Expand full-width compare breakdown below the card. */
+    projectCompareViewDetails?: string;
+    projectCompareHideDetails?: string;
+    /** Modal title template, e.g. "{project} — compare details" */
+    projectCompareDetailsTitle?: string;
+    /** Muted line under modal title */
+    projectCompareDetailsSubtitle?: string;
+    /** Section headings inside compare detail body */
+    projectCompareSectionMetrics?: string;
+    projectCompareSectionDimensions?: string;
+    projectCompareSectionHighlights?: string;
+    /** Chip labels (value shown separately) */
+    projectCompareLabelFindingsDelta?: string;
+    projectCompareLabelWorsened?: string;
+    projectCompareLabelImproved?: string;
+    projectCompareLabelResolved?: string;
+    /** Dimension row labels */
+    projectCompareDimComponent?: string;
+    projectCompareDimLifecycle?: string;
+    projectCompareDimTemplate?: string;
+    projectCompareDimResponsibility?: string;
+    /** List block titles */
+    projectCompareTopRegressions?: string;
+    projectCompareTopImprovements?: string;
+    projectCompareRulesIncreasing?: string;
+    projectCompareRulesDecreasing?: string;
+    /** Component list delta suffix */
+    projectCompareWarningsDelta?: string;
+    /** Small label above compare controls on project cards */
+    projectCompareStripKicker?: string;
+    sortDiffImpact?: string;
+    sortWorseFirst?: string;
+    sortBetterFirst?: string;
   };
   structure: {
     sectionTitle: string;
@@ -708,6 +769,7 @@ export interface Translations {
     chipRule?: string;
     chipProject?: string;
     chipSort?: string;
+    chipCompare?: string;
     partOfFamily?: string;
     sharedRefactorOpportunity?: string;
     filteringBy?: string;
@@ -722,6 +784,35 @@ export interface Translations {
     riskFromCombinedSignals?: string;
     multipleModerateIssuesElevated?: string;
     noSingleDominantButMultiRule?: string;
+    /** Compare strip: {worsened} {improved} {resolved} {new} {issueChanged} — counts in current filtered view */
+    summaryCompareStrip?: string;
+    compareBadgeNew?: string;
+    compareBadgeResolved?: string;
+    compareBadgeWorse?: string;
+    compareBadgeBetter?: string;
+    compareBadgeChanged?: string;
+    compareVsBaseline?: string;
+    comparePrevWarnings?: string;
+    compareCurrWarnings?: string;
+    comparePrevIssue?: string;
+    compareCurrIssue?: string;
+    compareAddedRules?: string;
+    compareRemovedRules?: string;
+    /** Components Explorer bar when one baseline; {date} */
+    explorerBaselineActive?: string;
+    /** When multiple project baselines; {count} */
+    explorerBaselineActiveMulti?: string;
+    explorerBaselineClearAll?: string;
+    /** Bar line: "Comparing project: {project}" */
+    explorerBaselineComparingProject?: string;
+    /** Bar line: "Baseline snapshot: {date}" */
+    explorerBaselineSnapshotLabel?: string;
+    /** Short counts for baseline bar */
+    explorerBaselineSummaryShort?: string;
+    explorerChangeBaseline?: string;
+    /** Overview project card compare row — same actions as Components bar, compact */
+    explorerBaselineCardChange?: string;
+    explorerBaselineCardClear?: string;
   };
   severityHint?: {
     critical: string;

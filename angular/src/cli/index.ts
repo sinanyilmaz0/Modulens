@@ -5,7 +5,9 @@ import * as fs from "fs";
 import * as path from "path";
 import { spawn } from "child_process";
 import { runScan } from "../core/run-scan";
-import { getFormatter } from "../formatters";
+import { getFormatter, JsonFormatter } from "../formatters";
+import type { AnalysisSnapshot } from "../core/analysis-snapshot";
+import { writeWorkspaceJsonSnapshot } from "./snapshot-file";
 import { ModulensError } from "../core/modulens-error";
 import { readCliPackageVersion } from "./package-version";
 import {
@@ -78,6 +80,17 @@ interface ScanCommandOptions {
   open?: boolean;
 }
 
+function jsonPayloadForWorkspaceSnapshot(
+  format: ScanCliFormat,
+  primaryPayload: string,
+  snapshot: AnalysisSnapshot
+): string {
+  if (format === "json") {
+    return primaryPayload;
+  }
+  return new JsonFormatter().format(snapshot);
+}
+
 async function handleScan(
   workspacePathArg: string,
   scanOptions: ScanCommandOptions
@@ -134,13 +147,46 @@ async function handleScan(
       if (!payload.endsWith("\n")) {
         process.stdout.write("\n");
       }
-      logInfo("[Modulens] JSON report written to stdout.");
+      logInfo("[Modulens] JSON report written to stdout (logs on stderr).");
+      const jsonPayload = jsonPayloadForWorkspaceSnapshot(format, payload, snapshot);
+      const snap = writeWorkspaceJsonSnapshot({
+        workspaceRootAbsolute: resolvedPath,
+        jsonPayload,
+        snapshot,
+      });
+      if (snap.ok) {
+        logInfo(`[Modulens] Workspace snapshot: ${snap.absolutePath}`);
+      } else {
+        logWarn(
+          `[Modulens] Report written to stdout, but snapshot could not be saved: ${snap.message}`
+        );
+      }
       return;
     }
 
     const outPath = outputTarget.absolutePath;
+    try {
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    } catch {
+      // writeFileSync will surface errors if directory cannot be used
+    }
     fs.writeFileSync(outPath, payload, "utf-8");
-    logInfo(`[Modulens] Report generated at: ${outPath}`);
+    const reportKind = format === "html" ? "HTML report" : "JSON report";
+    logInfo(`[Modulens] ${reportKind}: ${outPath}`);
+
+    const jsonPayload = jsonPayloadForWorkspaceSnapshot(format, payload, snapshot);
+    const snap = writeWorkspaceJsonSnapshot({
+      workspaceRootAbsolute: resolvedPath,
+      jsonPayload,
+      snapshot,
+    });
+    if (snap.ok) {
+      logInfo(`[Modulens] Workspace snapshot: ${snap.absolutePath}`);
+    } else {
+      logWarn(
+        `[Modulens] Report generated, but snapshot could not be saved: ${snap.message}`
+      );
+    }
 
     if (shouldOpenBrowser(format, noOpen)) {
       logInfo("[Modulens] Opening report in your default browser...");

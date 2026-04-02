@@ -48,7 +48,7 @@ test("resolveScanOutput default html path in workspace", () => {
   if (r.target.kind !== "file") return;
   assert.strictEqual(
     r.target.absolutePath,
-    path.join(workspaceRoot, "modulens-angular-report-my-workspace.html")
+    path.join(workspaceRoot, ".modulens", "reports", "modulens-angular-report-my-workspace.html")
   );
 });
 
@@ -65,7 +65,7 @@ test("resolveScanOutput default json path in workspace", () => {
   if (r.target.kind !== "file") return;
   assert.strictEqual(
     r.target.absolutePath,
-    path.join(workspaceRoot, "modulens-angular-report-my-workspace.json")
+    path.join(workspaceRoot, ".modulens", "reports", "modulens-angular-report-my-workspace.json")
   );
 });
 

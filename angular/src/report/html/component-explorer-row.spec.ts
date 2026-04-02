@@ -44,6 +44,27 @@ test("explorer row does not leak internal anomaly attributes or raw resolver tex
   assert.ok(!html.includes('confidence="inferred"'));
 });
 
+test("explorer row sets data-source-root from sourceRoot fallback to project", () => {
+  const html = renderComponentExplorerRow(
+    {
+      filePath: "/proj/libs/foo/src/a.component.ts",
+      fileName: "a.component.ts",
+      className: "A",
+      dominantIssue: "GOD_COMPONENT",
+      mainIssueFormatted: "God",
+      computedSeverity: "HIGH",
+      totalWarningCount: 1,
+      confidence: "measured",
+      sourceRoot: "libs/foo",
+      project: "libs/foo",
+    },
+    (issue) => issue ?? "",
+    t
+  );
+  assert.ok(html.includes('data-source-root="libs/foo"'));
+  assert.ok(html.includes('data-project="libs/foo"'));
+});
+
 test("explorer row data-search includes precomputed blob (rules, diagnostic, family, pattern)", () => {
   const rule = getRuleById("GOD_COMPONENT_SMELL");
   assert.ok(rule?.title);

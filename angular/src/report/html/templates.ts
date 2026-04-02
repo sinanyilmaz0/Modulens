@@ -34,6 +34,7 @@ import { ensureNoUnresolvedTokens, formatTemplate } from "./format-template";
 import { normalizeTextList } from "./section-normalization";
 import { formatDiagnosisCopy, buildWorkspaceDiagnosisFromLegacy, type WorkspaceDiagnosis } from "../../diagnostic/workspace-diagnosis";
 import { SIGNAL_DISPLAY_LABELS } from "./templates/signal-display-labels";
+import { normalizeFileKey } from "../snapshot-compare-input";
 import {
   escapeHtml,
   renderInfoTooltip,
@@ -698,8 +699,10 @@ export function renderProjectBreakdownCards(
     templateFindings?: number;
     responsibilityFindings?: number;
     lifecycleFindings?: number;
-  }>
+  }>,
+  compareOptions?: { compareEnabled?: boolean }
 ): string {
+  const compareEnabled = compareOptions?.compareEnabled === true;
   let projects = projectBreakdown.filter((p) => p.components > 0);
   const totalFindings = (p: typeof projects[0]) =>
     (p.componentFindings ?? p.componentsWithFindings ?? 0) + (p.templateFindings ?? 0) + (p.responsibilityFindings ?? 0) + (p.lifecycleFindings ?? 0);
@@ -774,12 +777,27 @@ export function renderProjectBreakdownCards(
     </div>`;
       }
 
+      const compareKicker =
+        (t.filters as { projectCompareStripKicker?: string }).projectCompareStripKicker ?? "Compare";
+      const compareStrip = compareEnabled
+        ? `<p class="project-compare-strip-kicker">${escapeHtml(compareKicker)}</p>
+      <button type="button" class="project-compare-btn" data-project-compare data-source-root="${escapeHtml(p.sourceRoot)}">Compare with previous snapshot</button>
+      <div class="project-compare-status" data-project-compare-status data-source-root="${escapeHtml(p.sourceRoot)}" hidden></div>
+      <div class="project-compare-diff-wrap">
+        <div class="project-compare-diff project-compare-diff-compact" data-project-compare-diff data-source-root="${escapeHtml(p.sourceRoot)}" hidden></div>
+      </div>
+      <button type="button" class="project-compare-details-toggle" data-project-compare-toggle-details data-source-root="${escapeHtml(p.sourceRoot)}" hidden aria-haspopup="dialog" aria-controls="project-compare-detail-modal">${escapeHtml(
+        (t.filters as { projectCompareViewDetails?: string }).projectCompareViewDetails ?? "View details"
+      )}</button>`
+        : "";
+
       return `
-    <div class="project-breakdown-card ${isWorst ? "project-breakdown-worst" : ""}">
+    <div class="project-breakdown-card ${isWorst ? "project-breakdown-worst" : ""}" data-project-card-source="${escapeHtml(p.sourceRoot)}">
       <div class="project-name">${escapeHtml(shortName)}</div>
       <div class="project-stats">${p.components} components</div>
       <div class="project-warnings">${total} findings</div>
       ${dimension ? `<div class="project-dimension"><span class="project-dimension-label">${escapeHtml(t.overview.primaryPressureArea)}:</span> ${escapeHtml(dimension)}</div>` : ""}
+      ${compareStrip}
     </div>`;
     })
     .join("");
@@ -1425,9 +1443,13 @@ export function renderComponentExplorerRow(
   const warningCountAttr = item.totalWarningCount != null ? String(item.totalWarningCount) : "0";
 
   const patternKeyAttr = item.patternKey && item.patternKey !== "NO_DOMINANT_ISSUE" ? `data-pattern-key="${escapeHtml(item.patternKey)}"` : "";
+  const componentKey = normalizeFileKey(item.filePath);
+  const projectKey = item.sourceRoot ?? item.project ?? "";
   const dataAttrs = [
     `data-file-path="${escapeHtml(item.filePath)}"`,
-    `data-project="${escapeHtml(item.project ?? "")}"`,
+    `data-component-key="${escapeHtml(componentKey)}"`,
+    `data-project="${escapeHtml(projectKey)}"`,
+    `data-source-root="${escapeHtml(projectKey)}"`,
     `data-issue-type="${escapeHtml(issueTypeAttr)}"`,
     patternKeyAttr,
     `data-severity="${escapeHtml(canonicalSeverity)}"`,
@@ -1454,6 +1476,7 @@ export function renderComponentExplorerRow(
     <div class="component-explorer-row component-explorer-row-compact severity-${severityClass}" ${dataAttrs} role="button" tabindex="0">
       <div class="comp-row-primary">
         <span class="comp-row-name" title="${nameTitle}">${escapeHtml(displayName)}</span>
+        <span class="component-explorer-compare-badges" data-compare-badges-slot="true" aria-hidden="true"></span>
       </div>
       <div class="comp-row-smell">
         ${smellBadge}
@@ -1520,6 +1543,7 @@ export function renderComponentsSummaryStrip(
   return `<div class="components-summary-strip" role="status" aria-live="polite">
     <div class="components-summary-primary" id="components-summary-primary">${escapeHtml(primary)}</div>
     <div class="components-summary-secondary" id="components-summary-secondary">${escapeHtml(secondary)}</div>
+    <div class="components-compare-summary" id="components-compare-summary" hidden></div>
   </div>`;
 }
 

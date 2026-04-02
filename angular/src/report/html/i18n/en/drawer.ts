@@ -71,5 +71,6 @@ export const enDrawer: Pick<Translations, "drawer"> = {
       "No primary ranked issue and no counted cross-analyzer warnings for this component.",
     diagnosisUnranked:
       "Findings exist, but none reached the threshold for a single primary ranked issue. Review rules and evidence in context.",
+    compareMiniTitle: "Baseline comparison",
   },
 };

@@ -34,7 +34,7 @@ Run Modulens in your Angular project directory:
 modulens scan
 ```
 
-This scans the current working directory, writes an HTML report into the workspace, and opens it in your default browser.
+This scans the current working directory, writes an HTML report under `.modulens/reports/` (default location), opens it in your default browser, and **always** saves a JSON snapshot under `.modulens/snapshots/` in that workspace (same analysis run; no second scan).
 
 Scan a specific workspace:
 
@@ -57,8 +57,10 @@ modulens scan
 | Flag | Description |
 |------|-------------|
 | `--format <type>` | Output format: `html` (default) or `json`. JSON is suitable for scripts and CI (`jq`, file archives, etc.). |
-| `-o, --output <path>` | Write the report to this file path (resolved from the current working directory). If omitted, the report is written under the scanned workspace as `modulens-angular-report-<workspace>.html` or `.json` depending on `--format`. |
+| `-o, --output <path>` | Write the report to this file path (resolved from the current working directory). If omitted, the report is written under `<workspace>/.modulens/reports/` as `modulens-angular-report-<workspace>.html` or `.json` depending on `--format`. |
 | `--no-open` | Generate the HTML report but do not launch a browser. No effect for JSON output (the browser is never opened for JSON). |
+
+Every successful scan also writes a **workspace JSON snapshot** (see [Workspace JSON snapshots](#workspace-json-snapshots) below), regardless of `--format`.
 
 Invalid `--format` values cause a non-zero exit code and an error message.
 
@@ -88,20 +90,32 @@ By default, the workspace argument defaults to `.` (current working directory).
 File name when `--output` is omitted:
 
 ```
-modulens-angular-report-<workspace>.html
+<workspace>/.modulens/reports/modulens-angular-report-<workspace>.html
 ```
 
-The file is created in the **scanned workspace** root. Unless `--no-open` is set, the report is opened in your default browser after a successful scan.
+Unless `--no-open` is set, the report is opened in your default browser after a successful scan.
 
 ### JSON
 
 Uses the same snapshot structure as the internal `JsonFormatter` (metadata, `result`, sections, and related precomputed views). When `--output` is omitted, the file is:
 
 ```
-modulens-angular-report-<workspace>.json
+<workspace>/.modulens/reports/modulens-angular-report-<workspace>.json
 ```
 
-in the workspace root.
+### Workspace JSON snapshots
+
+On every successful `modulens scan`, Modulens writes an additional JSON file under:
+
+```
+<workspace>/.modulens/snapshots/
+```
+
+The file name looks like `snapshot-YYYY-MM-DDTHH-mm-ss-<shortid>.json` (filesystem-safe timestamp plus a short id derived from the run metadata). The content matches the public JSON export (`JsonFormatter`), i.e. the same analysis snapshot as the HTML or primary JSON report. If the snapshot cannot be written (for example permissions), the CLI prints a warning but does not fail the scan solely for that reason when the main report was written successfully.
+
+The **HTML report** reads compatible snapshots from that folder (same workspace path in metadata, newest first) and embeds a short history for the UI. On overview **workspace breakdown** cards, **Compare with previous snapshot** opens a picker; the comparison is always **this run vs the stored snapshot you select**. Modulens precomputes a compact compare summary per history entry when the HTML is built (no browser disk access). Project cards then show deltas, top changes, and rule shifts for the selected baseline. If a file cannot be compared, you may see a short unavailable notice.
+
+On **Components**, compare is **project-scoped**: the explorer follows the **active compare project** (the project whose baseline you selected last). **Compare vs baseline** filters apply **within that project**—for example, “Worse” shows only components that worsened in that project, and “All (compare)” lists all components in that project. The baseline bar at the top of the Components page names the active project, baseline snapshot time, a short delta summary, and actions to change the baseline or clear compare. Overview project cards still hold **Compare with previous snapshot**, compact per-project metrics, and an expandable compare details panel.
 
 ---
 

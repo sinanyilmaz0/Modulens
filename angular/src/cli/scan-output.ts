@@ -1,4 +1,5 @@
 import * as path from "path";
+import { getReportsDirectory } from "./snapshot-file";
 
 export type ScanCliFormat = "html" | "json";
 
@@ -44,9 +45,10 @@ export function resolveScanOutput(options: {
   ) {
     const ext = format === "html" ? "html" : "json";
     const fileName = `modulens-angular-report-${slug}.${ext}`;
+    const reportsDir = getReportsDirectory(workspaceRootAbsolute);
     return {
       ok: true,
-      target: { kind: "file", absolutePath: path.join(workspaceRootAbsolute, fileName) },
+      target: { kind: "file", absolutePath: path.join(reportsDir, fileName) },
     };
   }
 
