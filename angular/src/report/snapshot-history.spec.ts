@@ -104,7 +104,7 @@ test("extractSnapshotSummary reads public JSON shape", () => {
       workspacePath: "/proj/ws",
       generatedAt: "2026-01-15T10:00:00.000Z",
       snapshotHash: "abc123def456",
-      toolVersion: "0.1.0",
+      toolVersion: "0.2.0",
     },
     workspace: {
       summary: { totalFindings: 42, riskLevel: "High", projectCount: 1, componentCount: 5 },

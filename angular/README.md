@@ -95,9 +95,11 @@ File name when `--output` is omitted:
 
 Unless `--no-open` is set, the report is opened in your default browser after a successful scan.
 
+On **Overview**, the report includes a short **executive summary** and **Priority focus** so you can see scale, risk signals, and where to look first before opening detailed charts and lists.
+
 ### JSON
 
-Uses the same snapshot structure as the internal `JsonFormatter` (metadata, `result`, sections, and related precomputed views). When `--output` is omitted, the file is:
+Uses the same snapshot structure as the internal `JsonFormatter` (metadata, `result`, sections, and related precomputed views). The document includes a top-level **`schemaVersion`** for the public JSON shape (incremented when the export contract changes). Metadata includes **`toolVersion`** and other run fields for traceability—downstream tools should treat **`schemaVersion`** as the compatibility key when parsing. When `--output` is omitted, the file is:
 
 ```
 <workspace>/.modulens/reports/modulens-angular-report-<workspace>.json
@@ -119,13 +121,13 @@ On **Overview**, use the **Compare** section to pick a baseline for **workspace-
 
 **Workspace breakdown** cards (projects or feature areas) are **informational**—component counts, findings, and primary pressure—without compare controls.
 
-On **Components**, choose **Compare components with a previous snapshot** when you want diff badges, the baseline bar, and **Compare vs baseline** filters. That selection is **separate** from Overview compare. Filters apply to components in the workspace using the precomputed per–source-root slice for the baseline you picked.
+On **Components**, choose **Compare components with a previous snapshot** when you want diff badges, the baseline bar, and **Compare vs baseline** filters. That selection is **separate** from Overview compare. Filters apply to components in the workspace using the precomputed per–source-root slice for the baseline you picked. The **Components** explorer helps you search and navigate; where it helps triage, the report surfaces **rule details** next to findings.
 
 ---
 
 ## Version
 
-`modulens --version` prints the version from the published package metadata (same as `package.json`).
+`modulens --version` prints the version from the published package metadata (same as `package.json`). Release notes for each version live in the repository [`CHANGELOG.md`](../CHANGELOG.md) at the repo root.
 
 ---
 
