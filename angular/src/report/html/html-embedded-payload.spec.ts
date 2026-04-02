@@ -1,4 +1,5 @@
 import { strict as assert } from "node:assert";
+import { normalizeFileKey } from "../snapshot-compare-input";
 import { buildHtmlClientComponentDetailsMap, buildHtmlClientExplorerItems } from "./html-embedded-payload";
 import type { ComponentDetailEntry, ComponentsExplorerItem } from "./html-report-presenter";
 
@@ -29,6 +30,7 @@ test("client component map drops internal severity debug fields", () => {
   assert.ok(!("anomalyReasons" in out));
   assert.strictEqual(out.severityTrustSummary, row.severityTrustSummary);
   assert.strictEqual(out.filePath, row.filePath);
+  assert.strictEqual(out.compareComponentKey, normalizeFileKey(row.filePath!));
 });
 
 test("client explorer items drop internal fields", () => {

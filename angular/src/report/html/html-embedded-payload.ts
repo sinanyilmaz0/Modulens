@@ -4,6 +4,7 @@
  */
 
 import type { ConfidenceBreakdown } from "../../confidence/confidence-models";
+import { normalizeFileKey } from "../snapshot-compare-input";
 import type { ComponentDetailEntry, ComponentsExplorerItem } from "./html-report-presenter";
 
 const MAX_CONTRIBUTING_SIGNALS = 8;
@@ -13,7 +14,10 @@ const MAX_DECOMP_REASONING_LINES = 24;
 type ClientComponentDetail = Omit<
   ComponentDetailEntry,
   "confidence" | "anomalyFlag" | "anomalyReasons" | "roleSignals"
->;
+> & {
+  /** Same key as explorer `data-component-key` / snapshot compare `componentChangesByKey` (server `normalizeFileKey`). */
+  compareComponentKey: string;
+};
 
 function stripComponentDetail(entry: ComponentDetailEntry): Omit<ComponentDetailEntry, "confidence" | "anomalyFlag" | "anomalyReasons"> {
   const { confidence: _c, anomalyFlag: _a, anomalyReasons: _r, ...rest } = entry;
@@ -116,6 +120,8 @@ function slimComponentDetailForHtml(entry: ComponentDetailEntry): ClientComponen
     if (Object.keys(sr).length) out.responsibility = sr;
     else delete out.responsibility;
   }
+
+  out.compareComponentKey = normalizeFileKey(entry.filePath ?? "");
 
   return out as ClientComponentDetail;
 }

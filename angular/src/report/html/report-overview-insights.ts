@@ -1,7 +1,3 @@
-/**
- * Overview v2: executive summary, priority focus rows, and recommended actions.
- * Pure data builders + small HTML renderers; uses only existing ScanResult / sections data.
- */
 
 import type { ScanResult } from "../../core/scan-result";
 import type { WorkspaceDiagnosis } from "../../diagnostic/workspace-diagnosis";

@@ -13,6 +13,7 @@ import {
 import { REPORT_STYLES } from "./styles";
 import { SIGNAL_DISPLAY_LABELS } from "./templates";
 import { buildHtmlClientComponentDetailsMap } from "./html-embedded-payload";
+import { slimSnapshotComparisonsForHtml } from "./snapshot-comparisons-embed";
 import { buildComponentExplorerSearchText } from "./component-explorer-search-text";
 import {
   escapeHtml,
@@ -74,6 +75,7 @@ import {
   renderComponentsSummaryStrip,
   renderPatternOverviewGrid,
   renderPatternSummaryZone,
+  renderProjectBreakdownCards,
   type ComponentExplorerRowInput,
   raw,
   type TableCell,
@@ -115,6 +117,8 @@ import {
   renderPriorityFocusSection,
   renderRecommendedActionsSection,
 } from "./report-overview-insights";
+import type { SnapshotComparisonPayload } from "../snapshot-compare";
+import type { SnapshotSummary } from "../snapshot-history";
 
 function getRiskBadgeClass(riskLevel: string): string {
   const lower = riskLevel.toLowerCase();
@@ -124,9 +128,48 @@ function getRiskBadgeClass(riskLevel: string): string {
   return "high";
 }
 
+function renderSnapshotCompareModal(): string {
+  return `
+  <div id="snapshot-compare-modal" class="snapshot-compare-modal" hidden aria-hidden="true">
+    <div class="snapshot-compare-modal-backdrop" data-snapshot-compare-close tabindex="-1"></div>
+    <div class="snapshot-compare-modal-panel" role="dialog" aria-modal="true" aria-labelledby="snapshot-compare-modal-title">
+      <h3 id="snapshot-compare-modal-title" class="snapshot-compare-modal-title">Compare with previous snapshot</h3>
+      <p class="snapshot-compare-modal-helper text-muted">Select a baseline snapshot. Project cards show a compact summary compared to that run.</p>
+      <div class="snapshot-compare-list" data-snapshot-compare-list></div>
+      <div class="snapshot-compare-modal-actions">
+        <button type="button" class="snapshot-compare-modal-close-btn" data-snapshot-compare-close>Close</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderProjectCompareDetailModal(t: ReturnType<typeof getTranslations>): string {
+  const tf = t.filters as Record<string, string | undefined>;
+  const subtitle =
+    tf.projectCompareDetailsSubtitle ?? "Differences between the selected baseline snapshot and this run.";
+  return `
+  <div id="project-compare-detail-modal" class="project-compare-detail-modal" hidden aria-hidden="true">
+    <div class="project-compare-detail-modal-backdrop" data-project-compare-detail-close tabindex="-1"></div>
+    <div class="project-compare-detail-modal-panel" role="dialog" aria-modal="true" aria-labelledby="project-compare-detail-modal-title" aria-describedby="project-compare-detail-modal-subtitle">
+      <div class="project-compare-detail-modal-head">
+        <div class="project-compare-detail-modal-head-text">
+          <h3 id="project-compare-detail-modal-title" class="project-compare-detail-modal-title"></h3>
+          <p id="project-compare-detail-modal-subtitle" class="project-compare-detail-modal-subtitle text-muted">${escapeHtml(subtitle)}</p>
+        </div>
+        <button type="button" class="project-compare-detail-modal-dismiss" data-project-compare-detail-close aria-label="Close">&times;</button>
+      </div>
+      <div id="project-compare-detail-modal-body" class="project-compare-detail-modal-body"></div>
+    </div>
+  </div>`;
+}
+
 export interface RenderOptions {
   /** When true, adds data-artifact-source-snapshot-id and debug attributes to HTML */
   debug?: boolean;
+  /** Workspace snapshot summaries for compare picker (embedded in HTML only). */
+  snapshotHistory?: SnapshotSummary[];
+  /** Precomputed current vs baseline compact diffs (key = snapshotHash or runId). */
+  snapshotComparisons?: Record<string, SnapshotComparisonPayload>;
 }
 
 export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOptions = {}): string {
@@ -144,7 +187,17 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
   const riskBadgeClass = getRiskBadgeClass(result.workspaceSummary.riskLevel);
 
   const sectionsArr = [...snapshot.sections];
-  const overviewHtml = renderOverviewPage(result, sectionsArr, t, formatIssue, formatFamily, componentDetailsMap);
+  const snapshotHistory = options.snapshotHistory ?? [];
+  const snapshotComparisons = slimSnapshotComparisonsForHtml(options.snapshotComparisons ?? {});
+  const overviewHtml = renderOverviewPage(
+    result,
+    sectionsArr,
+    t,
+    formatIssue,
+    formatFamily,
+    componentDetailsMap,
+    snapshotHistory
+  );
   const componentsHtml = renderComponentsPage(snapshot, sectionsArr, t, formatIssue);
   const patternsHtml = renderPatternsPage(result, sectionsArr, t, formatIssue, formatFamily, patternData);
   const rulesHtml = renderRulesPage(result, t);
@@ -204,6 +257,8 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
   </div>
 
   ${renderDetailModalShell(t)}
+  ${renderSnapshotCompareModal()}
+  ${renderProjectCompareDetailModal(t)}
 
   <script>
     window.__REPORT_META__ = ${JSON.stringify(snapshot.meta).replace(/<\/script>/gi, "<\\/script>")};
@@ -219,6 +274,8 @@ export function renderHtmlReport(snapshot: AnalysisSnapshot, options: RenderOpti
     window.__STRUCTURE_TO_PATHS__ = ${JSON.stringify(Object.fromEntries((result.structureConcerns?.concerns ?? []).map((c: StructureConcern) => [c.concernType, c.affectedPaths]))).replace(/<\/script>/gi, "<\\/script>")};
     window.__TRANSLATIONS__ = ${translationsJson};
     window.__SIGNAL_DISPLAY_LABELS__ = ${JSON.stringify(SIGNAL_DISPLAY_LABELS)};
+    window.__SNAPSHOT_HISTORY__ = ${JSON.stringify(snapshotHistory).replace(/<\/script>/gi, "<\\/script>")};
+    window.__SNAPSHOT_COMPARISONS__ = ${JSON.stringify(snapshotComparisons).replace(/<\/script>/gi, "<\\/script>")};
   </script>
   <script>
 ${REPORT_CLIENT_SCRIPT}
@@ -233,7 +290,8 @@ function renderOverviewPage(
   t: ReturnType<typeof getTranslations>,
   formatIssue: (issue: string | null) => string,
   formatFamily: (name: string) => string,
-  componentDetailsMap: Record<string, unknown>
+  componentDetailsMap: Record<string, unknown>,
+  snapshotHistory: SnapshotSummary[]
 ): string {
   const scoresSection = sections.find((s) => s.id === "scores");
   const scores = scoresSection?.data?.scores as ScanResult["scores"] | undefined;
@@ -357,6 +415,24 @@ function renderOverviewPage(
     );
   }
 
+  if (result.projectBreakdown.length > 0) {
+    html += renderProjectBreakdownCards(
+      result.projectBreakdown.map((p) => ({
+        sourceRoot: p.sourceRoot,
+        components: p.components,
+        componentsWithFindings: p.componentsWithFindings,
+        componentFindings: p.componentFindings,
+        templateFindings: p.templateFindings,
+        responsibilityFindings: p.responsibilityFindings,
+        lifecycleFindings: p.lifecycleFindings,
+      })),
+      t,
+      result.breakdownMode,
+      result.otherMinorClusters,
+      { compareEnabled: snapshotHistory.length > 0 }
+    );
+  }
+
   html += renderExecutiveSummarySection(buildExecutiveSummaryModel(result, diagnosis, formatIssue, t), t);
   html += renderPriorityFocusSection(buildPriorityHotspotRows(result, formatIssue), t);
 
@@ -438,21 +514,43 @@ function renderComponentsPage(
   const searchHelper = tf.searchHelper ?? "";
   const clearSearchLabel = (t.actions as Record<string, string | undefined>).clearSearch ?? "Clear search";
   const sortOptions = [
-    { value: "highest-risk", label: (t.filters as Record<string, string>).sortHighestRisk ?? "Highest risk" },
-    { value: "line-count", label: (t.filters as Record<string, string>).sortLineCount ?? "Line count" },
-    { value: "dependency-count", label: (t.filters as Record<string, string>).sortDependencyCount ?? "Dependency count" },
-    { value: "template-complexity", label: (t.filters as Record<string, string>).sortTemplateComplexity ?? "Template complexity" },
-    { value: "warning-count", label: (t.filters as Record<string, string>).sortWarningCount ?? "Warning count" },
-    { value: "severity", label: (t.filters as Record<string, string>).sortSeverity ?? "Severity (highest first)" },
-    { value: "name", label: (t.filters as Record<string, string>).sortName ?? "Name" },
+    { value: "highest-risk", label: tf.sortHighestRisk ?? "Highest risk" },
+    { value: "line-count", label: tf.sortLineCount ?? "Line count" },
+    { value: "dependency-count", label: tf.sortDependencyCount ?? "Dependency count" },
+    { value: "template-complexity", label: tf.sortTemplateComplexity ?? "Template complexity" },
+    { value: "warning-count", label: tf.sortWarningCount ?? "Warning count" },
+    { value: "severity", label: tf.sortSeverity ?? "Severity (highest first)" },
+    { value: "name", label: tf.sortName ?? "Name" },
+    { value: "diff-impact", label: tf.sortDiffImpact ?? "Diff impact" },
+    { value: "worse-first", label: tf.sortWorseFirst ?? "Worse first" },
+    { value: "better-first", label: tf.sortBetterFirst ?? "Better first" },
   ];
   const sortHelper = tf.sortHelper ?? "";
   const showHealthyLabel = (t.components as Record<string, string>).showHealthyComponents ?? "Show healthy components";
   const pageSizeLabel = (t.filters as Record<string, string>).pageSize ?? "Per page";
+  const tc = t.components as Record<string, string | undefined>;
+  const baselineBarLabel = tc.explorerBaselineActive ?? "Comparing against snapshot: {date}";
+  const baselineBarMulti = tc.explorerBaselineActiveMulti ?? "{count} baseline snapshots selected.";
+  const baselineClearLbl = tc.explorerBaselineClearAll ?? "Clear compare";
+  const baselineProjectTpl = tc.explorerBaselineComparingProject ?? "Comparing project: {project}";
+  const baselineSnapshotTpl = tc.explorerBaselineSnapshotLabel ?? "Baseline snapshot: {date}";
+  const baselineChangeLbl = tc.explorerChangeBaseline ?? "Change baseline";
   const filtersHtml = `
     <div class="components-page-header">
       <h2 class="page-section-title section-title-caps">${escapeHtml(pageTitle)}</h2>
       ${pageHelper ? `<p class="section-helper text-muted">${escapeHtml(pageHelper)}</p>` : ""}
+    </div>
+    <div id="components-explorer-baseline-bar" class="components-explorer-baseline-bar" hidden aria-live="polite">
+      <div class="components-explorer-baseline-main">
+        <p id="components-explorer-baseline-project-line" class="components-explorer-baseline-line components-explorer-baseline-project-line" data-template-project="${escapeHtml(baselineProjectTpl)}"></p>
+        <p id="components-explorer-baseline-snapshot-line" class="components-explorer-baseline-line text-muted components-explorer-baseline-snapshot-line" data-template-snapshot="${escapeHtml(baselineSnapshotTpl)}"></p>
+        <p id="components-explorer-baseline-summary" class="components-explorer-baseline-summary-line text-muted"></p>
+        <p id="components-explorer-baseline-legacy-text" class="components-explorer-baseline-text" hidden data-baseline-template-single="${escapeHtml(baselineBarLabel)}" data-baseline-template-multi="${escapeHtml(baselineBarMulti)}"></p>
+      </div>
+      <div class="components-explorer-baseline-actions">
+        <button type="button" id="components-explorer-baseline-change" class="components-baseline-action-btn" hidden>${escapeHtml(baselineChangeLbl)}</button>
+        <button type="button" id="components-explorer-baseline-clear" class="components-baseline-clear-btn" hidden>${escapeHtml(baselineClearLbl)}</button>
+      </div>
     </div>
     <div class="components-explorer-filters" id="components-filters">
       <input type="hidden" id="filter-rule-id" value="" />
@@ -510,6 +608,20 @@ function renderComponentsPage(
           <input type="checkbox" id="show-healthy-components" />
           ${escapeHtml(showHealthyLabel)}
         </label>
+        <div class="components-compare-filter-wrap">
+          <label class="components-compare-filter-label">${escapeHtml(tf.compareBaseline ?? "Compare vs baseline")}
+            <select id="filter-compare-diff" aria-describedby="filter-compare-diff-desc" disabled>
+              <option value="all">${escapeHtml(tf.compareAll ?? "All (compare)")}</option>
+              <option value="changed-only">${escapeHtml(tf.compareChangedOnly ?? "Changed only")}</option>
+              <option value="worse">${escapeHtml(tf.compareWorse ?? "Worse")}</option>
+              <option value="better">${escapeHtml(tf.compareBetter ?? "Better")}</option>
+              <option value="resolved">${escapeHtml(tf.compareResolved ?? "Resolved")}</option>
+              <option value="new">${escapeHtml(tf.compareNew ?? "New")}</option>
+              <option value="issue-changed">${escapeHtml(tf.compareIssueChanged ?? "Issue changed")}</option>
+            </select>
+          </label>
+          <p id="filter-compare-diff-desc" class="components-compare-filter-helper text-muted">${escapeHtml(tf.compareFilterHelper ?? "")}</p>
+        </div>
       </div>
     </div>`;
 
